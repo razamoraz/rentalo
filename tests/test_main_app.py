@@ -9,10 +9,6 @@ from ui.components import BackupWarningBanner, RoomCard
 
 @pytest.fixture
 def test_app(tmp_path):
-    # Set headless environment for Kivy
-    os.environ["KIVY_NO_ARGS"] = "1"
-    os.environ["KIVY_NO_WINDOW"] = "1"
-
     db_path = str(tmp_path / "test_app.db")
     app = RentaFacilApp(db_path=db_path)
     # Build widget tree

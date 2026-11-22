@@ -13,22 +13,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
+      - name: Install System Dependencies (Xvfb & OpenGL for Kivy)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1-mesa-dri libgl1
+
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install uv
           uv pip install --system "kivymd<2.0.0" kivy plyer pytest
 
-      - name: Run Pytest
+      - name: Run Pytest with Xvfb
         run: |
-          pytest -v tests/
+          xvfb-run -a pytest -v tests/
 
   build:
     name: Build Android APK with Buildozer
@@ -36,15 +41,15 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -74,7 +79,7 @@ jobs:
           pip install buildozer cython virtualenv
 
       - name: Cache Buildozer Global Directory
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.buildozer
           key: ${{ runner.os }}-buildozer-global-${{ hashFiles('buildozer.spec') }}
@@ -82,7 +87,7 @@ jobs:
             ${{ runner.os }}-buildozer-global-
 
       - name: Cache Project .buildozer Directory
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .buildozer
           key: ${{ runner.os }}-buildozer-project-${{ hashFiles('buildozer.spec') }}
@@ -94,9 +99,8 @@ jobs:
           buildozer -v android debug
 
       - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: RentaFacil-Debug-APK
           path: bin/*.apk
           retention-days: 14
-
