@@ -88,6 +88,8 @@ def get_export_directory() -> Path:
             from android.storage import primary_external_storage_path  # type: ignore
             base = primary_external_storage_path()
             export_dir = Path(base) / "Download" / "renTalo"
+        elif platform == "ios":
+            export_dir = Path.home() / "Documents"
         else:
             export_dir = Path.home() / "renTalo_Respaldos"
     except Exception:
@@ -125,6 +127,11 @@ def open_whatsapp(phone: str, message: str) -> bool:
             intent.setData(Uri.parse(whatsapp_url))
             PythonActivity.mActivity.startActivity(intent)
             return True
+        elif platform == "ios":
+            # En iOS el esquema directo whatsapp:// abre la app instalada
+            ios_url = f"whatsapp://send?phone={clean_phone}&text={encoded_message}"
+            if webbrowser.open(ios_url):
+                return True
     except Exception:
         pass
 

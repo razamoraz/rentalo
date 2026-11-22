@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 from unittest.mock import patch
 from ui.android_bridge import (
     clean_phone_for_whatsapp,
@@ -38,4 +39,17 @@ def test_get_export_directory():
     export_dir = get_export_directory()
     assert export_dir.exists()
     assert export_dir.is_dir()
+
+
+def test_ios_export_directory_and_whatsapp():
+    with patch("kivy.utils.platform", "ios"), patch("webbrowser.open") as mock_open:
+        mock_open.return_value = True
+        export_dir = get_export_directory()
+        assert export_dir == Path.home() / "Documents"
+
+        success = open_whatsapp("5215512345678", "Mensaje iOS")
+        assert success is True
+        mock_open.assert_called_once()
+        assert "whatsapp://send?phone=5215512345678" in mock_open.call_args[0][0]
+
 

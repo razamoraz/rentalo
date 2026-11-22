@@ -1,0 +1,69 @@
+name: Build iOS App (renTalo)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'main.py'
+      - 'core/**'
+      - 'ui/**'
+      - '.github/workflows/build_ios.yml'
+
+jobs:
+  build-ios:
+    name: Build iOS Xcode Project
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install System Dependencies
+        run: |
+          brew install autoconf automake libtool pkg-config
+          brew link libtool
+
+      - name: Cache kivy-ios Build Directory
+        uses: actions/cache@v6
+        with:
+          path: ~/.kivy-ios
+          key: ${{ runner.os }}-kivy-ios-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-kivy-ios-
+
+      - name: Install kivy-ios and Cython
+        run: |
+          python -m pip install --upgrade pip
+          pip install cython kivy-ios
+
+      - name: Compile Core Recipes (Python3 & Kivy for iOS)
+        run: |
+          toolchain build python3 kivy
+          toolchain pip install "kivymd<2.0.0" plyer
+
+      - name: Create renTalo Xcode Project
+        run: |
+          toolchain create renTalo .
+
+      - name: Build Xcode Project for iOS
+        run: |
+          cd build/renTalo-ios
+          xcodebuild -project renTalo.xcodeproj \
+            -scheme renTalo \
+            -sdk iphoneos \
+            -configuration Release \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Upload iOS Xcode Project Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: renTalo-iOS-Xcode-Project
+          path: build/renTalo-ios/
+          retention-days: 14
