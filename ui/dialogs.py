@@ -610,7 +610,7 @@ def show_backup_manager_dialog(
     def export_payments():
         try:
             folder = get_export_directory()
-            filename = f"pagos_rentafacil_{reference_date.strftime('%Y%m%d')}.csv"
+            filename = f"pagos_rentalo_{reference_date.strftime('%Y%m%d')}.csv"
             filepath = folder / filename
             export_payments_csv(db, filepath)
             share_file(str(filepath), title="Compartir historial de pagos")
@@ -621,7 +621,7 @@ def show_backup_manager_dialog(
     def export_rooms():
         try:
             folder = get_export_directory()
-            filename = f"cuartos_rentafacil_{reference_date.strftime('%Y%m%d')}.csv"
+            filename = f"cuartos_rentalo_{reference_date.strftime('%Y%m%d')}.csv"
             filepath = folder / filename
             export_rooms_status_csv(db, filepath, reference_date=reference_date)
             share_file(str(filepath), title="Compartir estado de cuartos")

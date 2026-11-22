@@ -1,13 +1,13 @@
 [app]
 
 # (str) Title of your application
-title = RentaFácil
+title = renTalo
 
 # (str) Package name
-package.name = rentafacil
+package.name = rentalo
 
 # (str) Package domain (needed for android/ios packaging)
-package.domain = org.rentafacil
+package.domain = org.rentalo
 
 # (str) Source code where the main.py lives
 source.dir = .
@@ -16,7 +16,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json,db
 
 # (list) Source files to exclude
-source.exclude_dirs = tests,bin,.venv,.pytest_cache,.git,exportaciones_rentafacil
+source.exclude_dirs = tests,bin,.venv,.pytest_cache,.git,exportaciones_rentalo,exportaciones_rentafacil
 
 # (str) Application versioning
 version = 1.0.0

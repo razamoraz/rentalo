@@ -62,13 +62,16 @@ from core.notifications import (
 from ui.android_bridge import open_whatsapp, send_local_notification
 
 
-class RentaFacilApp(MDApp):
+class RenTaloApp(MDApp):
     def __init__(self, db_path: Optional[str] = None, **kwargs):
         super().__init__(**kwargs)
-        self.title = "RentaFácil"
+        self.title = "renTalo"
         # Ruta de base de datos configurable (útil para pruebas y producción)
         if db_path is None:
-            db_file = Path("rentafacil.db")
+            if Path("rentalo.db").exists() or not Path("rentafacil.db").exists():
+                db_file = Path("rentalo.db")
+            else:
+                db_file = Path("rentafacil.db")
         else:
             db_file = Path(db_path)
         self.db = DatabaseManager(db_file)
@@ -87,7 +90,7 @@ class RentaFacilApp(MDApp):
         month_name = get_spanish_month_name(self.reference_date.month).capitalize()
         year = self.reference_date.year
         self.top_bar = MDTopAppBar(
-            title=f"RentaFácil - {month_name} {year}",
+            title=f"renTalo - {month_name} {year}",
             elevation=2,
             right_action_items=[
                 ["cloud-upload-outline", lambda x: self.open_backup_dialog(), "Respaldos y Excel"],
@@ -352,6 +355,10 @@ class RentaFacilApp(MDApp):
         )
 
 
+# Alias para compatibilidad hacia atrás
+RentaFacilApp = RenTaloApp
+
+
 if __name__ == "__main__":
-    app = RentaFacilApp()
+    app = RenTaloApp()
     app.run()

@@ -1,11 +1,16 @@
-# 🗺️ Hoja de Ruta del Proyecto (RentaFácil Roadmap)
+# 🗺️ Hoja de Ruta del Proyecto (renTalo Roadmap)
 
-Documento oficial para el seguimiento de versiones, funcionalidades y próximos hitos de desarrollo para **RentaFácil**, la aplicación Android offline-first en español para la gestión de cuartos en alquiler.
+> **renTalo** es un juego de palabras (*puzzle word*) que fusiona tres idiomas:
+> - 🇫🇮 **talo:** «casa» o «edificio» en finés.
+> - 🇬🇧 **rent:** «renta» o «alquiler» en inglés.
+> - 🇪🇸 **réntalo:** «¡alquílalo!» en español (*renta + lo*).
+
+Documento oficial para el seguimiento de versiones, funcionalidades y próximos hitos de desarrollo para **renTalo**, la aplicación offline-first para la gestión de cuartos en alquiler.
 
 ---
 
 ## 📌 Principios de Diseño
-1. **100% Offline-First:** Toda la persistencia reside en SQLite local del dispositivo; ningún dato se envía a servidores externos sin el consentimiento expreso del operador.
+1. **100% Offline-First:** Toda la persistencia reside en SQLite local del dispositivo (`rentalo.db`); ningún dato se envía a servidores externos sin el consentimiento expreso del operador.
 2. **Español Natural:** Toda la terminología, interfaces, reportes de Excel y plantillas de WhatsApp están diseñadas en lenguaje claro, cordial y comprensible para operadores no técnicos.
 3. **Objetivos Táctiles Accesibles:** Botones de al menos 48dp - 52dp y contrastes de color inmediatos (Verde = Pagado, Amarillo = Pendiente días 1-5, Rojo = Atrasado día 6+, Gris = Disponible).
 4. **Desacoplamiento Estricto (TDD):** Lógica pura en `core/` (solo biblioteca estándar de Python) y presentación ligera en `ui/` (KivyMD).
@@ -17,7 +22,7 @@ Documento oficial para el seguimiento de versiones, funcionalidades y próximos 
 
 ### ✅ Hito 1: Núcleo de Dominio y Persistencia (Completado)
 - [x] Modelos de datos: `Room`, `Lease`, `Payment`.
-- [x] Base de datos SQLite ([core/database.py](file:///home/razamoraz/Gitprog/rentalo/core/database.py)) con claves foráneas e integridad referencial.
+- [x] Base de datos SQLite ([core/database.py](file:///home/razamoraz/Gitprog/rentalo/core/database.py)) con claves foráneas e integridad referencial (`rentalo.db`).
 - [x] Idempotencia en confirmación de pagos mensuales (`UNIQUE(lease_id, billing_year, billing_month)`).
 - [x] Motor de cobro con ventana de 5 días naturales (`PAGADO`, `PENDIENTE` días 1-5, `ATRASADO` día 6+).
 - [x] Exportador CSV con codificación `utf-8-sig` (compatible con acentos en Excel y Sheets).
@@ -36,12 +41,12 @@ Documento oficial para el seguimiento de versiones, funcionalidades y próximos 
 - [x] Diálogos táctiles para nuevo cuarto, asignación de inquilino y registro de pago.
 
 ### ✅ Hito 3: Empaquetado Android con Buildozer (Completado)
-- [x] Archivo de especificación [buildozer.spec](file:///home/razamoraz/Gitprog/rentalo/buildozer.spec) configurado para API 34 (Android 14) y MinAPI 21.
+- [x] Archivo de especificación [buildozer.spec](file:///home/razamoraz/Gitprog/rentalo/buildozer.spec) configurado para API 34 (Android 14) y MinAPI 21 con el paquete `org.rentalo` / nombre `renTalo`.
 - [x] Permisos requeridos configurados (`POST_NOTIFICATIONS`, `READ/WRITE_EXTERNAL_STORAGE`, `INTERNET`, `VIBRATE`).
 
 ### ✅ Hito 4: CI/CD en GitHub Actions y Notificaciones Locales (Completado)
-- [x] Pipeline [.github/workflows/build_apk.yml](file:///home/razamoraz/Gitprog/rentalo/.github/workflows/build_apk.yml) para ejecutar pruebas unitarias y compilar el APK automáticamente en cada push a `main` o `master`.
-- [x] Publicación del APK descargable como artefacto en GitHub Actions.
+- [x] Pipeline [.github/workflows/build_apk.yml](file:///home/razamoraz/Gitprog/rentalo/.github/workflows/build_apk.yml) para ejecutar pruebas unitarias bajo Xvfb y compilar el APK automáticamente en cada push a `main` o `master`.
+- [x] Publicación del APK descargable como artefacto (`renTalo-Debug-APK`) en GitHub Actions.
 - [x] Notificaciones locales mensuales en el dispositivo (días 1 al 5 para cobro, día 6+ para atrasados) con control de no duplicación en `settings`.
 
 ### ✅ Hito 4.1: Depósito en Garantía y Cobros Proporcionales (Completado)

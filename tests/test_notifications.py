@@ -27,7 +27,7 @@ def test_reminder_notification_days_1_to_5_pending(db_with_leases):
 
     assert notification is not None
     assert notification["type"] == TYPE_PENDIENTE
-    assert "Cobro de Renta" in notification["title"] or "RentaFácil" in notification["title"]
+    assert "Cobro de Renta" in notification["title"] or "renTalo" in notification["title"]
     assert "noviembre" in notification["message"].lower()
     assert "2" in notification["message"]  # 2 pending rooms
 
@@ -62,7 +62,7 @@ def test_no_notification_when_all_paid(db_with_leases):
 def test_send_local_notification_fallback():
     # Test desktop/fallback dispatching
     result = send_local_notification(
-        title="RentaFácil - Recordatorio",
+        title="renTalo - Recordatorio",
         message="Tienes 2 cuartos pendientes de cobro este mes."
     )
     assert result is True

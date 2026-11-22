@@ -87,17 +87,17 @@ def get_export_directory() -> Path:
         if platform == "android":
             from android.storage import primary_external_storage_path  # type: ignore
             base = primary_external_storage_path()
-            export_dir = Path(base) / "Download" / "RentaFacil"
+            export_dir = Path(base) / "Download" / "renTalo"
         else:
-            export_dir = Path.home() / "RentaFacil_Respaldos"
+            export_dir = Path.home() / "renTalo_Respaldos"
     except Exception:
-        export_dir = Path.home() / "RentaFacil_Respaldos"
+        export_dir = Path.home() / "renTalo_Respaldos"
 
     try:
         export_dir.mkdir(parents=True, exist_ok=True)
     except Exception:
         # Respaldo si no hay permisos en la ruta preferida
-        export_dir = Path("exportaciones_rentafacil")
+        export_dir = Path("exportaciones_rentalo")
         export_dir.mkdir(parents=True, exist_ok=True)
 
     return export_dir
@@ -155,8 +155,8 @@ def send_local_notification(title: str, message: str) -> bool:
         notification.notify(
             title=title,
             message=message,
-            app_name="RentaFácil",
-            ticker="RentaFácil",
+            app_name="renTalo",
+            ticker="renTalo",
             timeout=10
         )
         return True
@@ -177,7 +177,7 @@ def send_local_notification(title: str, message: str) -> bool:
             context = PythonActivity.mActivity
             notif_service = context.getSystemService(Context.NOTIFICATION_SERVICE)
 
-            channel_id = "rentafacil_recordatorios"
+            channel_id = "rentalo_recordatorios"
             channel_name = "Recordatorios de Renta"
             importance = NotificationManager.IMPORTANCE_DEFAULT
 

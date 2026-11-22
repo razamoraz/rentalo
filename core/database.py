@@ -5,7 +5,7 @@ from core.models import Room, Lease, Payment
 
 
 class DatabaseManager:
-    def __init__(self, db_path: Union[str, Path] = "rentafacil.db"):
+    def __init__(self, db_path: Union[str, Path] = "rentalo.db"):
         self.db_path = str(db_path)
         self._conn: Optional[sqlite3.Connection] = None
         self._init_db()

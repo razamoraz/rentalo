@@ -131,7 +131,7 @@ def export_database_to_json(db: DatabaseManager, target_path: Union[str, Path]) 
 
     payload = {
         "version": 1,
-        "app": "RentaFácil",
+        "app": "renTalo",
         "exported_at": datetime.now().isoformat(),
         "rooms": rooms,
         "leases": leases,
@@ -159,7 +159,7 @@ def import_database_from_json(
         data: Dict[str, Any] = json.load(f)
 
     if not isinstance(data, dict) or "rooms" not in data or "leases" not in data or "payments" not in data:
-        raise ValueError("El archivo JSON no tiene la estructura requerida de RentaFácil.")
+        raise ValueError("El archivo JSON no tiene la estructura requerida de renTalo.")
 
     # Validar formato básico de elementos
     for r in data["rooms"]:
@@ -253,7 +253,7 @@ def merge_database_from_json(
         data: Dict[str, Any] = json.load(f)
 
     if not isinstance(data, dict) or "rooms" not in data or "leases" not in data or "payments" not in data:
-        raise ValueError("El archivo JSON no tiene la estructura requerida de RentaFácil.")
+        raise ValueError("El archivo JSON no tiene la estructura requerida de renTalo.")
 
     rooms_count = 0
     leases_count = 0
@@ -433,7 +433,7 @@ def build_backup_reminder_whatsapp_message(
     """
     Genera un mensaje cordial en español para recordar al operador realizar el respaldo de seguridad.
     """
-    saludo = f"Estimado(a) {operator_name}" if operator_name else "Aviso de RentaFácil"
+    saludo = f"Estimado(a) {operator_name}" if operator_name else "Aviso de renTalo"
     tiempo_texto = f"hace más de {days_since_last} días" if days_since_last else "hace más de 6 meses"
 
     return (

@@ -1,10 +1,15 @@
-# RentaFácil 🏠📱
+# renTalo 🏠📱
 
-Aplicación Android ultra-simple y 100% offline en español para la gestión mensual de renta de cuartos por parte de operadores no técnicos.
+> **renTalo** es un juego de palabras (*puzzle word*) que fusiona tres idiomas:
+> - 🇫🇮 **talo:** «casa» o «edificio» en finés.
+> - 🇬🇧 **rent:** «renta» o «alquiler» en inglés.
+> - 🇪🇸 **réntalo:** «¡alquílalo!» en español (*renta + lo*).
+
+Aplicación Android ultra-simple y 100% offline para la gestión mensual de renta de cuartos por parte de operadores no técnicos.
 
 ---
 
-## 🎨 Características de Milestone 2 (Interfaz KivyMD & Android)
+## 🎨 Características Principales (KivyMD & Android)
 
 1. **Separación Arquitectónica Estricta:**
    - `core/`: 100% biblioteca estándar de Python (`sqlite3`, `dataclasses`, `datetime`, `csv`, `json`, `urllib.parse`, `pathlib`). Sin dependencias de UI para pruebas unitarias instantáneas y robustas.
@@ -31,7 +36,7 @@ Aplicación Android ultra-simple y 100% offline en español para la gestión men
    - Cuando `is_backup_overdue()` es `True` (más de 180 días sin respaldar o primera vez), se muestra una alerta roja/ámbar en la parte superior con un botón directo `RESPALDAR AHORA MISMO`.
    - Permite exportar a Excel (`.csv` con codificación `utf-8-sig`) y crear respaldos completos portátiles (`.json`).
 
-4. **Notificaciones Locales de Recordatorio Mensual:**
+6. **Notificaciones Locales de Recordatorio Mensual:**
    - Días 1 al 5: Alerta local cordial indicando el inicio del período de cobro y cuántos cuartos están pendientes.
    - Día 6 en adelante: Alerta local de aviso si existen cuartos con pagos atrasados.
    - Idempotencia: Registra el envío en la base de datos para no saturar al usuario con avisos repetitivos en el mismo mes.
@@ -41,15 +46,19 @@ Aplicación Android ultra-simple y 100% offline en español para la gestión men
 ## 🤖 CI/CD Automatizado con GitHub Actions
 
 El archivo `.github/workflows/build_apk.yml` automatiza:
-1. Ejecución de las 40 pruebas unitarias en `ubuntu-latest`.
-2. Compilación del APK debug de Android con `buildozer` en `ubuntu-22.04` (JDK 17 + Python 3.11).
-3. Publicación del artefacto APK descargable en GitHub Actions en cada `push` a las ramas `main` y `master`.
+1. **Ejecución de las pruebas unitarias** en display virtual Xvfb en `ubuntu-latest`.
+2. **Compilación automática del APK debug de Android** con `buildozer` en `ubuntu-22.04` (JDK 17 + Python 3.11).
+3. **Publicación del artefacto APK descargable** (`renTalo-Debug-APK`) en GitHub Actions en cada `push` a las ramas `main` y `master`.
 
 ---
 
-## 🗺️ Hoja de Ruta y Próximos Hitos
+## 🗺️ Hoja de Ruta y Soporte Multiplataforma (Android / iOS)
 
-Consulta [ROADMAP.md](file:///home/razamoraz/Gitprog/rentalo/ROADMAP.md) para conocer el desglose detallado de los hitos completados y los que se encuentran en desarrollo (fotos de INE offline, finiquitos de depósito y división de recibos CFE).
+Consulta [ROADMAP.md](file:///home/razamoraz/Gitprog/rentalo/ROADMAP.md) para conocer el desglose detallado de los hitos completados y los que se encuentran en desarrollo:
+- Fotos de INE offline.
+- Finiquitos de depósito y recibos de entrega-recepción.
+- Calculadora de división de recibos CFE / agua.
+- Soporte multiplataforma Apple (iOS / macOS) mediante `kivy-ios` en runners macOS de GitHub Actions.
 
 ---
 
@@ -61,14 +70,14 @@ Para correr la suite de pruebas completa:
 .venv/bin/pytest -v tests/
 ```
 
-Todas las 35 pruebas cubren:
+Todas las 53 pruebas cubren:
 - Operaciones CRUD y claves foráneas en SQLite.
 - Idempotencia de pagos por mes/año.
 - Cálculo de la ventana de pago (Día 1, Día 5, Día 6).
 - Generación de links de WhatsApp en español con codificación URL.
 - Exportación e importación transaccional JSON con rollback ante fallos.
 - Lógica de detección de respaldos vencidos (180 días).
-- Inicialización y renderizado de la UI de KivyMD.
+- Inicialización y renderizado de la UI de KivyMD con `renTalo`.
 
 ---
 
@@ -85,4 +94,3 @@ Todas las 35 pruebas cubren:
 ```bash
 buildozer android debug
 ```
-

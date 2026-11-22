@@ -48,7 +48,7 @@ def get_monthly_reminder_status(
         setting_key = f"notif_{year}_{month}_{TYPE_PENDIENTE}"
         if db.get_setting(setting_key) is None:
             return {
-                "title": "RentaFácil - Cobro de Renta",
+                "title": "renTalo - Cobro de Renta",
                 "message": (
                     f"Inicia el período de cobro de {month_name}. "
                     f"Tienes {pending_count} cuarto(s) pendiente(s) de cobro."
@@ -62,7 +62,7 @@ def get_monthly_reminder_status(
         setting_key = f"notif_{year}_{month}_{TYPE_ATRASADO}"
         if db.get_setting(setting_key) is None:
             return {
-                "title": "RentaFácil - Rentas Atrasadas",
+                "title": "renTalo - Rentas Atrasadas",
                 "message": (
                     f"Atención: Han transcurrido los primeros 5 días de {month_name}. "
                     f"Tienes {overdue_count} cuarto(s) con renta atrasada."

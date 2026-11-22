@@ -1,7 +1,7 @@
 import os
 import pytest
 from datetime import date, timedelta
-from main import RentaFacilApp
+from main import RenTaloApp, RentaFacilApp
 from core.billing_engine import STATUS_PAGADO, STATUS_PENDIENTE, STATUS_ATRASADO
 from core.backup_manager import record_backup_completed
 from ui.components import BackupWarningBanner, RoomCard
@@ -10,7 +10,7 @@ from ui.components import BackupWarningBanner, RoomCard
 @pytest.fixture
 def test_app(tmp_path):
     db_path = str(tmp_path / "test_app.db")
-    app = RentaFacilApp(db_path=db_path)
+    app = RenTaloApp(db_path=db_path)
     # Build widget tree
     app.build()
     return app
@@ -22,7 +22,7 @@ def test_app_initialization_and_sample_seed(test_app):
     assert len(rooms) >= 3
 
     # Check top bar
-    assert test_app.top_bar.title.startswith("RentaFácil")
+    assert test_app.top_bar.title.startswith("renTalo")
     # Content layout contains widgets
     assert len(test_app.content_layout.children) > 0
 

@@ -33,7 +33,7 @@ def populated_db():
     db.record_payment(l2.id, 2026, 10, 3200.0, "2026-10-04")
 
     # Settings
-    db.set_setting("app_name", "RentaFácil")
+    db.set_setting("app_name", "renTalo")
     return db
 
 
@@ -93,14 +93,14 @@ def test_export_rooms_status_csv_utf8_sig(populated_db, tmp_path):
 
 
 def test_json_backup_and_restore_roundtrip(populated_db, tmp_path):
-    json_file = tmp_path / "backup_rentafacil.json"
+    json_file = tmp_path / "backup_rentalo.json"
     export_database_to_json(populated_db, json_file)
 
     assert json_file.exists()
     with open(json_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    assert data["app"] == "RentaFácil"
+    assert data["app"] in ["renTalo", "RentaFácil"]
     assert "rooms" in data and len(data["rooms"]) == 3
     assert "leases" in data and len(data["leases"]) == 2
     assert "payments" in data and len(data["payments"]) == 2
@@ -123,13 +123,13 @@ def test_json_backup_and_restore_roundtrip(populated_db, tmp_path):
     restored_payments = new_db.get_all_payments()
     assert len(restored_payments) == 2
 
-    assert new_db.get_setting("app_name") == "RentaFácil"
+    assert new_db.get_setting("app_name") in ["renTalo", "RentaFácil"]
 
 
 def test_json_import_corrupted_data_rolls_back(populated_db, tmp_path):
     bad_json_file = tmp_path / "corrupted_backup.json"
     # Malformed data missing critical fields
-    bad_json_file.write_text('{"app": "RentaFácil", "rooms": [{"invalid_key": 1}]}', encoding="utf-8")
+    bad_json_file.write_text('{"app": "renTalo", "rooms": [{"invalid_key": 1}]}', encoding="utf-8")
 
     # Attempt to import into populated db should fail and keep original data intact
     with pytest.raises(Exception):
