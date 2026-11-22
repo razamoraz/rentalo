@@ -22,7 +22,7 @@ source.exclude_dirs = tests,bin,.venv,.pytest_cache,.git,exportaciones_rentalo,e
 version = 1.0.0
 
 # (list) Application requirements
-requirements = python3,kivy==2.3.2,kivymd==1.2.0,plyer==2.1.0
+requirements = python3,kivy==2.3.2,kivymd==1.2.0,pillow,plyer==2.1.0
 
 # (str) Supported orientation (one of landscape, sensorLandscape, portrait or all)
 orientation = portrait
@@ -49,7 +49,7 @@ android.ndk = 25b
 android.accept_sdk_license = True
 
 # (str) The Android archs to build for
-android.archs = arm64-v8a, armeabi-v7a
+android.archs = arm64-v8a
 
 # (bool) Enables Android auto backup feature
 android.allow_backup = True
