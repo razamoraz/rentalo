@@ -7,4 +7,6 @@ comprobantes_pagos/
 exportaciones_rentafacil/
 exportaciones_rentalo/
 fotos_inquilinos/
+.buildozer/
+bin/
 
