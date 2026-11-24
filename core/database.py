@@ -1,7 +1,8 @@
+import json
 import sqlite3
 from pathlib import Path
 from typing import Optional, Union, List, Dict
-from core.models import Room, Lease, Payment
+from core.models import Room, Lease, Payment, DepositDeduction, LeaseSettlement
 
 
 class DatabaseManager:
@@ -61,6 +62,17 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS lease_settlements (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    lease_id INTEGER NOT NULL REFERENCES leases(id) ON DELETE CASCADE,
+                    settlement_date TEXT NOT NULL,
+                    deposit_total REAL NOT NULL,
+                    deductions_json TEXT NOT NULL,
+                    total_deductions REAL NOT NULL,
+                    refund_amount REAL NOT NULL,
+                    notes TEXT
                 );
             """)
 
@@ -395,3 +407,99 @@ class DatabaseManager:
     def get_all_settings(self) -> Dict[str, str]:
         cursor = self.conn.execute("SELECT key, value FROM settings")
         return {r["key"]: r["value"] for r in cursor.fetchall()}
+
+    # ---------------------------------------------------------
+    # SETTLEMENTS & DEPOSIT LIQUIDATION (MILESTONE 6)
+    # ---------------------------------------------------------
+    def _row_to_settlement(self, row: sqlite3.Row) -> LeaseSettlement:
+        try:
+            raw_deductions = json.loads(row["deductions_json"])
+        except Exception:
+            raw_deductions = []
+        deductions = [
+            DepositDeduction.from_dict(d) if isinstance(d, dict) else d
+            for d in raw_deductions
+        ]
+        return LeaseSettlement(
+            id=row["id"],
+            lease_id=row["lease_id"],
+            settlement_date=row["settlement_date"],
+            deposit_total=row["deposit_total"],
+            deductions=deductions,
+            total_deductions=row["total_deductions"],
+            refund_amount=row["refund_amount"],
+            notes=row["notes"]
+        )
+
+    def finalize_lease_with_settlement(
+        self,
+        lease_id: int,
+        settlement_date: str,
+        deposit_total: float,
+        deductions: List[DepositDeduction],
+        notes: Optional[str] = None
+    ) -> LeaseSettlement:
+        """
+        Finaliza el contrato, libera la habitación y registra el finiquito del depósito en una sola transacción.
+        """
+        lease = self.get_lease(lease_id)
+        if not lease:
+            raise ValueError(f"Contrato con ID {lease_id} no encontrado.")
+
+        dep_total = max(0.0, float(deposit_total))
+        tot_deductions = round(sum(max(0.0, float(d.amount)) for d in deductions), 2)
+        refund = round(dep_total - tot_deductions, 2)
+        deductions_payload = json.dumps([d.to_dict() for d in deductions], ensure_ascii=False)
+
+        with self.conn:
+            # 1. Finalizar contrato y desocupar habitación
+            self.conn.execute(
+                "UPDATE leases SET is_active = 0, end_date = ? WHERE id = ?",
+                (settlement_date, lease_id)
+            )
+            self.conn.execute("UPDATE rooms SET is_occupied = 0 WHERE id = ?", (lease.room_id,))
+
+            # 2. Registrar finiquito
+            cursor = self.conn.execute(
+                """
+                INSERT INTO lease_settlements (
+                    lease_id, settlement_date, deposit_total,
+                    deductions_json, total_deductions, refund_amount, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    lease_id,
+                    settlement_date,
+                    dep_total,
+                    deductions_payload,
+                    tot_deductions,
+                    refund,
+                    notes.strip() if notes else None
+                )
+            )
+            settlement_id = cursor.lastrowid
+
+        return LeaseSettlement(
+            id=settlement_id,
+            lease_id=lease_id,
+            settlement_date=settlement_date,
+            deposit_total=dep_total,
+            deductions=deductions,
+            total_deductions=tot_deductions,
+            refund_amount=refund,
+            notes=notes.strip() if notes else None
+        )
+
+    def get_settlement_for_lease(self, lease_id: int) -> Optional[LeaseSettlement]:
+        cursor = self.conn.execute(
+            "SELECT * FROM lease_settlements WHERE lease_id = ? ORDER BY id DESC LIMIT 1",
+            (lease_id,)
+        )
+        row = cursor.fetchone()
+        return self._row_to_settlement(row) if row else None
+
+    def get_all_settlements(self) -> List[LeaseSettlement]:
+        cursor = self.conn.execute(
+            "SELECT * FROM lease_settlements ORDER BY settlement_date DESC, id DESC"
+        )
+        return [self._row_to_settlement(r) for r in cursor.fetchall()]

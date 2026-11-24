@@ -8,8 +8,14 @@ from kivymd.uix.textfield import MDTextField
 from kivymd.uix.label import MDLabel
 from kivymd.uix.snackbar import MDSnackbar
 
-from core.models import Room, Lease
+from core.models import Room, Lease, DepositDeduction
 from core.database import DatabaseManager
+from core.settlement_engine import (
+    calculate_settlement,
+    build_settlement_whatsapp_message,
+    STATUS_REFUND_TO_TENANT,
+    STATUS_EXACT_BALANCE
+)
 from core.billing_engine import (
     get_spanish_month_name,
     STATUS_PAGADO,
@@ -548,35 +554,175 @@ def show_end_lease_dialog(
     lease: Lease,
     on_ended: Callable[[], None]
 ) -> MDDialog:
-    """Diálogo para finalizar un contrato y desocupar el cuarto."""
+    """Diálogo interactivo para liquidar depósito, deducir daños y finalizar contrato con finiquito WhatsApp."""
+    content = MDBoxLayout(
+        orientation="vertical",
+        spacing=dp(8),
+        size_hint_y=None,
+        height=dp(380)
+    )
+
+    deposit_val = float(lease.deposit_amount or 0.0)
+    deductions_list: list = []
+
+    header = MDLabel(
+        text=(
+            f"🏠 [b]{room.name}[/b]  |  Inquilino: [b]{lease.tenant_name}[/b]\n"
+            f"💰 Depósito en garantía: [b]${deposit_val:,.2f}[/b]"
+        ),
+        markup=True,
+        theme_text_color="Primary",
+        font_style="Body2",
+        size_hint_y=None,
+        height=dp(36)
+    )
+    content.add_widget(header)
+
+    concept_input = MDTextField(
+        hint_text="Concepto deducción (ej. Pintura, Llaves)",
+        text="",
+        size_hint_y=None,
+        height=dp(40)
+    )
+    content.add_widget(concept_input)
+
+    amount_input = MDTextField(
+        hint_text="Monto a deducir ($)",
+        text="",
+        input_filter="float",
+        size_hint_y=None,
+        height=dp(40)
+    )
+    content.add_widget(amount_input)
+
+    summary_label = MDLabel(
+        text=f"Saldo neto a devolver al inquilino: ${deposit_val:,.2f}",
+        bold=True,
+        theme_text_color="Custom",
+        text_color=COLOR_PAGADO,
+        font_style="Caption",
+        size_hint_y=None,
+        height=dp(32)
+    )
+
+    deductions_summary = MDLabel(
+        text="Sin deducciones aplicadas (depósito íntegro).",
+        theme_text_color="Secondary",
+        font_style="Caption",
+        size_hint_y=None,
+        height=dp(45)
+    )
+
+    def update_balance_display():
+        calc = calculate_settlement(deposit_val, deductions_list)
+        ref = calc["refund_amount"]
+        if calc["status"] == STATUS_REFUND_TO_TENANT:
+            summary_label.text = f"Saldo a devolver al inquilino: ${ref:,.2f}"
+            summary_label.text_color = COLOR_PAGADO
+        elif calc["status"] == STATUS_EXACT_BALANCE:
+            summary_label.text = "Cuentas saldadas ($0.00)"
+            summary_label.text_color = (0.2, 0.5, 0.8, 1.0)
+        else:
+            summary_label.text = f"Inquilino adeuda: ${calc['balance_due_by_tenant']:,.2f}"
+            summary_label.text_color = COLOR_BANNER_WARNING
+
+        if deductions_list:
+            items_txt = "Deducciones: " + ", ".join(f"{d.concept} (-${d.amount:,.0f})" for d in deductions_list[-3:])
+            if len(deductions_list) > 3:
+                items_txt += f" (+{len(deductions_list)-3} más)"
+            deductions_summary.text = items_txt
+        else:
+            deductions_summary.text = "Sin deducciones aplicadas (depósito íntegro)."
+
+    def add_deduction_item():
+        c_text = concept_input.text.strip()
+        a_text = amount_input.text.strip()
+        if not c_text:
+            show_snackbar("Escriba el concepto de la deducción.")
+            return
+        try:
+            val = float(a_text)
+            if val <= 0:
+                show_snackbar("El monto debe ser mayor a 0.")
+                return
+            deductions_list.append(DepositDeduction(concept=c_text, amount=val))
+            concept_input.text = ""
+            amount_input.text = ""
+            update_balance_display()
+            show_snackbar(f"Deducción agregada: {c_text} (-${val:,.2f})")
+        except ValueError:
+            show_snackbar("Ingrese un monto numérico válido.")
+
+    btn_add_deduction = MDFlatButton(
+        text="+ AGREGAR DEDUCCIÓN AL FINIQUITO",
+        theme_text_color="Primary",
+        size_hint=(1, None),
+        height=dp(36),
+        on_release=lambda x: add_deduction_item()
+    )
+    content.add_widget(btn_add_deduction)
+    content.add_widget(summary_label)
+    content.add_widget(deductions_summary)
+
+    notes_input = MDTextField(
+        hint_text="Observaciones de entrega (opcional)",
+        text="",
+        size_hint_y=None,
+        height=dp(38)
+    )
+    content.add_widget(notes_input)
+
     dialog = None
 
-    def on_confirm(instance):
+    def execute_settlement(send_whatsapp: bool):
         try:
-            db.end_lease(lease.id, end_date=date.today().isoformat())
+            today_str = date.today().isoformat()
+            db.finalize_lease_with_settlement(
+                lease_id=lease.id,
+                settlement_date=today_str,
+                deposit_total=deposit_val,
+                deductions=deductions_list,
+                notes=notes_input.text.strip() or None
+            )
+
             if dialog:
                 dialog.dismiss()
-            show_snackbar(f"Contrato finalizado. {room.name} ahora está disponible.")
+
+            show_snackbar(f"Contrato finalizado y finiquito guardado. {room.name} ahora está disponible.")
             on_ended()
+
+            if send_whatsapp:
+                msg = build_settlement_whatsapp_message(
+                    tenant_name=lease.tenant_name,
+                    room_name=room.name,
+                    settlement_date=date.today(),
+                    deposit_total=deposit_val,
+                    deductions=deductions_list,
+                    notes=notes_input.text.strip() or None
+                )
+                open_whatsapp(lease.tenant_phone, msg)
         except Exception as e:
-            show_snackbar(f"Error: {e}")
+            show_snackbar(f"Error al liquidar contrato: {e}")
 
     dialog = MDDialog(
-        title="Finalizar Contrato",
-        text=(
-            f"¿Está seguro de terminar el contrato de {lease.tenant_name} en {room.name}?\n\n"
-            f"El cuarto quedará disponible para un nuevo inquilino. Todo el historial de "
-            f"pagos anteriores se mantendrá guardado."
-        ),
+        title="Finiquito y Entrega de Cuarto",
+        type="custom",
+        content_cls=content,
         buttons=[
             MDFlatButton(
                 text="CANCELAR",
                 on_release=lambda x: dialog.dismiss()
             ),
+            MDFlatButton(
+                text="FINALIZAR SIN WHATSAPP",
+                theme_text_color="Custom",
+                text_color=COLOR_BANNER_WARNING,
+                on_release=lambda x: execute_settlement(send_whatsapp=False)
+            ),
             MDRaisedButton(
-                text="FINALIZAR Y LIBERAR",
-                md_bg_color=COLOR_BANNER_WARNING,
-                on_release=on_confirm
+                text="FINALIZAR Y ENVIAR WHATSAPP",
+                md_bg_color=COLOR_PAGADO,
+                on_release=lambda x: execute_settlement(send_whatsapp=True)
             )
         ]
     )

@@ -127,6 +127,7 @@ def export_database_to_json(db: DatabaseManager, target_path: Union[str, Path]) 
     rooms = [r.to_dict() for r in db.get_all_rooms()]
     leases = [l.to_dict() for l in db.get_all_leases(active_only=False)]
     payments = [p.to_dict() for p in db.get_all_payments()]
+    settlements = [s.to_dict() for s in db.get_all_settlements()]
     settings = db.get_all_settings()
 
     payload = {
@@ -136,6 +137,7 @@ def export_database_to_json(db: DatabaseManager, target_path: Union[str, Path]) 
         "rooms": rooms,
         "leases": leases,
         "payments": payments,
+        "settlements": settlements,
         "settings": settings
     }
 
@@ -177,6 +179,7 @@ def import_database_from_json(
     # Ejecutar dentro de una transacción segura
     with db.conn:
         if clear_existing:
+            db.conn.execute("DELETE FROM lease_settlements")
             db.conn.execute("DELETE FROM payments")
             db.conn.execute("DELETE FROM leases")
             db.conn.execute("DELETE FROM rooms")
@@ -223,6 +226,26 @@ def import_database_from_json(
                     p["paid_date"],
                     p.get("proof_image_path"),
                     p.get("payment_method", "TRANSFERENCIA")
+                )
+            )
+
+        for s in data.get("settlements", []):
+            raw_ded = s.get("deductions", [])
+            ded_json = json.dumps([d.to_dict() if hasattr(d, "to_dict") else d for d in raw_ded], ensure_ascii=False)
+            db.conn.execute(
+                """
+                INSERT INTO lease_settlements (id, lease_id, settlement_date, deposit_total, deductions_json, total_deductions, refund_amount, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    s.get("id"),
+                    int(s["lease_id"]),
+                    s["settlement_date"],
+                    float(s["deposit_total"]),
+                    ded_json,
+                    float(s["total_deductions"]),
+                    float(s["refund_amount"]),
+                    s.get("notes")
                 )
             )
 

@@ -73,8 +73,15 @@ Documento oficial para el seguimiento de versiones, funcionalidades y próximos 
 
 ---
 
+### ✅ Hito 6: Recibo de Finiquito y Entrega de Habitación por WhatsApp (Completado)
+- [x] Al finalizar un contrato, calculadora interactiva de deducciones de depósito (`DepositDeduction`, `LeaseSettlement` y tabla `lease_settlements`).
+- [x] Cálculo en tiempo real de saldo a favor del inquilino (devolución) o saldo pendiente a favor del arrendador.
+- [x] Generación automática de comprobante formal de finiquito y entrega-recepción formal vía WhatsApp.
+- [x] Botón de envío del *Reglamento Interno de la Casa* en 1 toque por WhatsApp.
+- [x] Preservación transaccional de finiquitos en exportaciones y respaldos JSON.
+
 ### ✅ Hito 8: Soporte Multiplataforma Apple (iOS / macOS) (Completado)
-- [x] Workflow de GitHub Actions [.github/workflows/build_ios.yml](file:///home/razamoraz/Gitprog/rentalo/.github/workflows/build_ios.yml) con runner `macos-14` (Apple Silicon M1/M2) para compilar la app con `kivy-ios`.
+- [x] Workflow de GitHub Actions [.github/workflows/build_ios.yml](file:///home/razamoraz/Gitprog/rentalo/.github/workflows/build_ios.yml) con runner `macos-14` / `macos-15` (Apple Silicon M1/M2) para compilar la app con `kivy-ios`.
 - [x] Adaptación en [ui/android_bridge.py](file:///home/razamoraz/Gitprog/rentalo/ui/android_bridge.py) para apertura de WhatsApp mediante esquema nativo `whatsapp://send` y almacenamiento accesible en `~/Documents`.
 - [x] Pruebas unitarias de compatibilidad iOS en `tests/test_android_bridge.py`.
 
@@ -82,13 +89,7 @@ Documento oficial para el seguimiento de versiones, funcionalidades y próximos 
 
 ## 🔮 Próximos Hitos en Desarrollo
 
-### 🔲 Hito 6: Recibo de Finiquito y Entrega de Habitación por WhatsApp (Prioridad 1)
-- [ ] Al finalizar un contrato, calculadora interactiva de deducciones de depósito (daños, pintura, llaves extraviadas, aseo profundo).
-- [ ] Cálculo en tiempo real de saldo a favor del inquilino (devolución) o saldo pendiente a favor del arrendador.
-- [ ] Generación automática de comprobante formal de finiquito y entrega-recepción formal vía WhatsApp.
-- [ ] Botón de envío del *Reglamento Interno de la Casa* en 1 toque.
-
-### 🔲 Hito 5: Captura y Almacenamiento Local de Identificación (INE / ID) (Prioridad 2)
+### 🔲 Hito 5: Captura y Almacenamiento Local de Identificación (INE / ID) (Prioridad 1)
 - [ ] Captura de foto frontal y trasera de INE mediante cámara o selector de galería del teléfono.
 - [ ] Compresión local offline (JPEG optimizado) en carpeta privada de la aplicación (`fotos_inquilinos/`).
 - [ ] Visor emergente dentro de la app para consultar la identificación del inquilino en cualquier momento sin internet.

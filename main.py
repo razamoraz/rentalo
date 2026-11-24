@@ -36,6 +36,7 @@ from core.backup_manager import (
     is_backup_overdue,
     record_backup_completed
 )
+from core.settlement_engine import build_house_rules_whatsapp_message
 from ui.theme_config import (
     COLOR_PAGADO,
     COLOR_PENDIENTE,
@@ -274,6 +275,15 @@ class RenTaloApp(MDApp):
             on_assigned=lambda l: self.refresh_ui()
         )
 
+    def on_send_house_rules(self, lease: Lease) -> None:
+        """Abre WhatsApp con el reglamento interno de la casa para el inquilino."""
+        msg = build_house_rules_whatsapp_message(tenant_name=lease.tenant_name, house_name="renTalo")
+        success = open_whatsapp(lease.tenant_phone, msg)
+        if success:
+            show_snackbar(f"Abriendo WhatsApp con reglamento para {lease.tenant_name}...")
+        else:
+            show_snackbar("No se pudo abrir WhatsApp.")
+
     def on_room_menu(self, room: Room, lease: Optional[Lease]) -> None:
         """Menú de opciones adicionales para el cuarto."""
         dialog = None
@@ -289,7 +299,15 @@ class RenTaloApp(MDApp):
             )
             buttons.append(
                 MDFlatButton(
-                    text="FINALIZAR CONTRATO",
+                    text="📜 REGLAMENTO INTERNO (WHATSAPP)",
+                    theme_text_color="Custom",
+                    text_color=(0.12, 0.53, 0.53, 1.0),
+                    on_release=lambda x: [dialog.dismiss(), self.on_send_house_rules(lease)]
+                )
+            )
+            buttons.append(
+                MDFlatButton(
+                    text="FINALIZAR CONTRATO Y FINIQUITO",
                     theme_text_color="Custom",
                     text_color=COLOR_BANNER_WARNING,
                     on_release=lambda x: [dialog.dismiss(), show_end_lease_dialog(self.db, room, lease, self.refresh_ui)]

@@ -41,6 +41,11 @@ Aplicación Android ultra-simple y 100% offline para la gestión mensual de rent
    - Día 6 en adelante: Alerta local de aviso si existen cuartos con pagos atrasados.
    - Idempotencia: Registra el envío en la base de datos para no saturar al usuario con avisos repetitivos en el mismo mes.
 
+7. **Finiquito de Depósito y Reglamento de la Casa por WhatsApp (Milestone 6):**
+   - **Calculadora interactiva de finiquito:** Permite aplicar deducciones justificadas (pintura, llaves extraviadas, aseo) al finalizar el contrato y ver en tiempo real el saldo a devolver.
+   - **Comprobante formal de entrega:** Envío instantáneo por WhatsApp con desglose punto por punto y despedida cordial.
+   - **Reglamento interno de convivencia:** Envío en 1 toque desde el menú del cuarto con las normas de silencio (10 PM - 7 AM), áreas comunes y puntualidad.
+
 ---
 
 ## 🤖 CI/CD Automatizado con GitHub Actions

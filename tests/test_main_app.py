@@ -59,3 +59,31 @@ def test_app_check_monthly_notifications(test_app):
     # If run a second time, it should safely return without issues
     test_app.check_monthly_notifications()
     assert True
+
+
+def test_app_send_house_rules_and_settlement_dialog(test_app):
+    from unittest.mock import patch
+    from ui.dialogs import show_end_lease_dialog
+
+    leases = test_app.db.get_all_leases(active_only=True)
+    assert len(leases) > 0
+    lease = leases[0]
+    room = test_app.db.get_room(lease.room_id)
+
+    # Test house rules dispatch
+    with patch("webbrowser.open") as mock_open:
+        mock_open.return_value = True
+        test_app.on_send_house_rules(lease)
+        mock_open.assert_called_once()
+        assert "Reglamento" in mock_open.call_args[0][0]
+
+    # Test settlement dialog opens cleanly
+    dialog = show_end_lease_dialog(
+        db=test_app.db,
+        room=room,
+        lease=lease,
+        on_ended=lambda: None
+    )
+    assert dialog is not None
+    assert "Finiquito" in dialog.title
+    dialog.dismiss()

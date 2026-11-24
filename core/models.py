@@ -80,3 +80,64 @@ class Payment:
             proof_image_path=data.get("proof_image_path"),
             payment_method=data.get("payment_method", "TRANSFERENCIA")
         )
+
+
+@dataclass
+class DepositDeduction:
+    concept: str
+    amount: float
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "DepositDeduction":
+        return cls(
+            concept=str(data["concept"]),
+            amount=float(data["amount"])
+        )
+
+
+@dataclass
+class LeaseSettlement:
+    id: Optional[int]
+    lease_id: int
+    settlement_date: str  # ISO YYYY-MM-DD
+    deposit_total: float
+    deductions: list
+    total_deductions: float
+    refund_amount: float
+    notes: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "lease_id": self.lease_id,
+            "settlement_date": self.settlement_date,
+            "deposit_total": self.deposit_total,
+            "deductions": [
+                d.to_dict() if isinstance(d, DepositDeduction) else d
+                for d in self.deductions
+            ],
+            "total_deductions": self.total_deductions,
+            "refund_amount": self.refund_amount,
+            "notes": self.notes
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "LeaseSettlement":
+        raw_deductions = data.get("deductions", [])
+        deductions = [
+            DepositDeduction.from_dict(d) if isinstance(d, dict) else d
+            for d in raw_deductions
+        ]
+        return cls(
+            id=data.get("id"),
+            lease_id=int(data["lease_id"]),
+            settlement_date=str(data["settlement_date"]),
+            deposit_total=float(data["deposit_total"]),
+            deductions=deductions,
+            total_deductions=float(data["total_deductions"]),
+            refund_amount=float(data["refund_amount"]),
+            notes=data.get("notes")
+        )
