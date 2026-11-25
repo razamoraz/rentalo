@@ -234,3 +234,49 @@ def test_backup_json_roundtrip_preserves_settlements(db_with_active_lease, tmp_p
     assert s.refund_amount == 2600.0
     assert len(s.deductions) == 1
     assert s.deductions[0].concept == "Pintura"
+
+
+def test_finalize_already_inactive_lease_raises(db_with_active_lease):
+    db, _, lease = db_with_active_lease
+    db.finalize_lease_with_settlement(
+        lease_id=lease.id,
+        settlement_date="2026-11-24",
+        deposit_total=3000.0,
+        deductions=[]
+    )
+    with pytest.raises(ValueError, match="ya fue finalizado"):
+        db.finalize_lease_with_settlement(
+            lease_id=lease.id,
+            settlement_date="2026-11-25",
+            deposit_total=3000.0,
+            deductions=[]
+        )
+
+
+def test_merge_database_from_json_preserves_settlements_without_duplicates(tmp_path):
+    from core.backup_manager import merge_database_from_json
+
+    db_sup1 = DatabaseManager(":memory:")
+    r1 = db_sup1.create_room("Cuarto A", 2500.0)
+    l1 = db_sup1.start_lease(r1.id, "Carlos", "5215511112222", 2500.0, "2026-01-01", deposit_amount=2500.0)
+    db_sup1.finalize_lease_with_settlement(
+        lease_id=l1.id,
+        settlement_date="2026-11-20",
+        deposit_total=2500.0,
+        deductions=[DepositDeduction(concept="Llaves", amount=150.0)],
+        notes="Finiquito supervisor 1"
+    )
+    sup1_json = tmp_path / "sup1.json"
+    export_database_to_json(db_sup1, sup1_json)
+
+    db_sup2 = DatabaseManager(":memory:")
+    db_sup2.create_room("Cuarto B", 3000.0)
+
+    stats1 = merge_database_from_json(db_sup2, sup1_json)
+    assert stats1["settlements_merged"] == 1
+    assert len(db_sup2.get_all_settlements()) == 1
+
+    # Re-merging the same file must not duplicate the settlement
+    stats2 = merge_database_from_json(db_sup2, sup1_json)
+    assert stats2["settlements_merged"] == 0
+    assert len(db_sup2.get_all_settlements()) == 1

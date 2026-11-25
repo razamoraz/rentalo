@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
+        with:
+          path: src
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -31,30 +33,63 @@ jobs:
       - name: Cache kivy-ios Build Directory
         uses: actions/cache@v6
         with:
-          path: ~/.kivy-ios
-          key: ${{ runner.os }}-kivy-ios-${{ hashFiles('buildozer.spec') }}
+          path: |
+            dist
+            ~/.cache/kivy-ios
+          key: ${{ runner.os }}-kivy-ios-v2-${{ hashFiles('src/buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-kivy-ios-
+            ${{ runner.os }}-kivy-ios-v2-
 
       - name: Install kivy-ios and Cython
         run: |
           python -m pip install --upgrade pip
           pip install cython kivy-ios
 
-      - name: Compile Core Recipes (Python3 & Kivy for iOS)
+      - name: Compile Core Recipes (Python3, Kivy & Pillow for iOS)
         run: |
-          toolchain build python3 kivy
+          toolchain build python3 kivy pillow
           toolchain pip install "kivymd<2.0.0" plyer
 
       - name: Create renTalo Xcode Project
         run: |
-          toolchain create renTalo .
+          toolchain create renTalo "$PWD/src"
+          IOS_DIR=$(find . -maxdepth 1 -type d -name '*-ios' | head -n 1)
+          test -n "$IOS_DIR"
+          echo "IOS_DIR=$IOS_DIR" >> "$GITHUB_ENV"
+          ls -la "$IOS_DIR"
+
+      - name: Configure iOS Info.plist Permissions & URL Schemes
+        run: |
+          python - <<'EOF'
+          import os
+          import plistlib
+          from pathlib import Path
+
+          ios_dir = Path(os.environ["IOS_DIR"])
+          plist_files = list(ios_dir.rglob("*Info.plist"))
+          assert plist_files, f"No Info.plist found under {ios_dir}"
+          for plist_path in plist_files:
+              with open(plist_path, "rb") as f:
+                  data = plistlib.load(f)
+              schemes = list(data.get("LSApplicationQueriesSchemes", []))
+              if "whatsapp" not in schemes:
+                  schemes.append("whatsapp")
+              data["LSApplicationQueriesSchemes"] = schemes
+              data.setdefault("NSCameraUsageDescription", "renTalo necesita acceso a la cámara para capturar identificaciones (INE) y comprobantes.")
+              data.setdefault("NSPhotoLibraryUsageDescription", "renTalo necesita acceso a tus fotos para adjuntar identificaciones (INE) y comprobantes de pago.")
+              with open(plist_path, "wb") as f:
+                  plistlib.dump(data, f)
+              print(f"Updated {plist_path}")
+          EOF
 
       - name: Build Xcode Project for iOS
         run: |
-          cd build/renTalo-ios
-          xcodebuild -project renTalo.xcodeproj \
-            -scheme renTalo \
+          cd "$IOS_DIR"
+          XCODEPROJ=$(find . -maxdepth 1 -type d -name '*.xcodeproj' | head -n 1)
+          test -n "$XCODEPROJ"
+          SCHEME=$(basename "$XCODEPROJ" .xcodeproj)
+          xcodebuild -project "$XCODEPROJ" \
+            -scheme "$SCHEME" \
             -sdk iphoneos \
             -configuration Release \
             CODE_SIGNING_ALLOWED=NO \
@@ -65,6 +100,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: renTalo-iOS-Xcode-Project
-          path: build/renTalo-ios/
+          path: ${{ env.IOS_DIR }}
           retention-days: 14
-

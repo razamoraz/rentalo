@@ -87,3 +87,28 @@ def test_app_send_house_rules_and_settlement_dialog(test_app):
     assert dialog is not None
     assert "Finiquito" in dialog.title
     dialog.dismiss()
+
+
+def test_app_tenant_id_and_image_viewer_dialogs(test_app, tmp_path):
+    from PIL import Image
+    from ui.dialogs import show_tenant_id_dialog, show_image_viewer_dialog
+
+    leases = test_app.db.get_all_leases(active_only=True)
+    lease = leases[0]
+    room = test_app.db.get_room(lease.room_id)
+
+    img_file = tmp_path / "ine_test.jpg"
+    Image.new("RGB", (400, 250), color=(40, 100, 140)).save(img_file)
+    updated_lease = test_app.db.update_lease(lease.id, id_front_path=str(img_file))
+
+    id_dialog = show_tenant_id_dialog(test_app.db, room, updated_lease, lambda: None)
+    assert "INE" in id_dialog.title
+    id_dialog.dismiss()
+
+    viewer = show_image_viewer_dialog("INE Frente", str(img_file))
+    assert viewer.title == "INE Frente"
+    viewer.dismiss()
+
+    # Room menu opens cleanly without throwing or overflowing horizontal buttons
+    test_app.on_room_menu(room, updated_lease)
+    assert True

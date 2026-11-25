@@ -13,6 +13,8 @@ from ui.theme_config import (
     COLOR_PENDIENTE,
     COLOR_ATRASADO,
     COLOR_DISPONIBLE,
+    COLOR_TEXT_DARK,
+    COLOR_TEXT_LIGHT,
     get_status_theme,
     STATUS_DISPONIBLE
 )
@@ -21,21 +23,25 @@ from ui.theme_config import (
 def test_status_theme_colors():
     theme_pagado = get_status_theme(STATUS_PAGADO)
     assert theme_pagado["color"] == COLOR_PAGADO
+    assert theme_pagado["text_color"] == COLOR_TEXT_LIGHT
     assert theme_pagado["label"] == "PAGADO"
     assert "check" in theme_pagado["icon"]
 
     theme_pendiente = get_status_theme(STATUS_PENDIENTE)
     assert theme_pendiente["color"] == COLOR_PENDIENTE
+    assert theme_pendiente["text_color"] == COLOR_TEXT_DARK
     assert theme_pendiente["label"] == "PENDIENTE"
     assert "clock" in theme_pendiente["icon"] or "alert" in theme_pendiente["icon"]
 
     theme_atrasado = get_status_theme(STATUS_ATRASADO)
     assert theme_atrasado["color"] == COLOR_ATRASADO
+    assert theme_atrasado["text_color"] == COLOR_TEXT_LIGHT
     assert theme_atrasado["label"] == "ATRASADO"
     assert "alert" in theme_atrasado["icon"]
 
     theme_disponible = get_status_theme(STATUS_DISPONIBLE)
     assert theme_disponible["color"] == COLOR_DISPONIBLE
+    assert theme_disponible["text_color"] == COLOR_TEXT_LIGHT
     assert theme_disponible["label"] == "DISPONIBLE"
 
 

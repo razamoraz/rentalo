@@ -14,7 +14,7 @@ Documento oficial para el seguimiento de versiones, funcionalidades y próximos 
 2. **Español Natural:** Toda la terminología, interfaces, reportes de Excel y plantillas de WhatsApp están diseñadas en lenguaje claro, cordial y comprensible para operadores no técnicos.
 3. **Objetivos Táctiles Accesibles:** Botones de al menos 48dp - 52dp y contrastes de color inmediatos (Verde = Pagado, Amarillo = Pendiente días 1-5, Rojo = Atrasado día 6+, Gris = Disponible).
 4. **Desacoplamiento Estricto (TDD):** Lógica pura en `core/` (solo biblioteca estándar de Python) y presentación ligera en `ui/` (KivyMD).
-5. **Métricas de Calidad:** 53 pruebas unitarias e integrales automatizadas con `pytest` que verifican cada funcionalidad antes de su despliegue.
+5. **Métricas de Calidad:** 74 pruebas unitarias e integrales automatizadas con `pytest` que verifican cada funcionalidad antes de su despliegue.
 
 ---
 
@@ -87,13 +87,11 @@ Documento oficial para el seguimiento de versiones, funcionalidades y próximos 
 
 ---
 
-## 🔮 Próximos Hitos en Desarrollo
-
-### 🔲 Hito 5: Captura y Almacenamiento Local de Identificación (INE / ID) (Prioridad 1)
-- [ ] Captura de foto frontal y trasera de INE mediante cámara o selector de galería del teléfono.
-- [ ] Compresión local offline (JPEG optimizado) en carpeta privada de la aplicación (`fotos_inquilinos/`).
-- [ ] Visor emergente dentro de la app para consultar la identificación del inquilino en cualquier momento sin internet.
-- [ ] Vinculación directa en la ficha y contrato del inquilino.
+### ✅ Hito 5: Captura y Almacenamiento Local de Identificación (INE / ID) (Completado)
+- [x] Captura de foto frontal y trasera de INE mediante cámara o selector de galería del teléfono (`pick_image_file`, `capture_camera_photo`).
+- [x] Compresión local offline (JPEG optimizado con Pillow) en carpeta privada de la aplicación (`fotos_inquilinos/`).
+- [x] Visor emergente dentro de la app (`show_image_viewer_dialog`) para consultar la identificación y comprobantes sin internet.
+- [x] Vinculación directa en el contrato (`id_front_path`, `id_back_path`), respaldos JSON y menú contextual del cuarto.
 
 ### 🚫 Hito 7: Calculadora y División de Servicios Compartidos (Descartado)
 - *Descartado según requerimiento del proyecto: Todos los servicios (luz, agua, gas, internet) están incluidos en la renta mensual.*

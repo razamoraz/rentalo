@@ -1,13 +1,12 @@
-from typing import Optional, Callable
+from typing import Optional, Callable, Tuple
 from kivy.metrics import dp
-from kivy.uix.boxlayout import BoxLayout
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel, MDIcon
 from kivymd.uix.button import (
     MDRaisedButton,
-    MDFillRoundFlatButton,
-    MDFlatButton,
+    MDFillRoundFlatIconButton,
+    MDRectangleFlatIconButton,
     MDIconButton
 )
 
@@ -15,19 +14,56 @@ from core.models import Room, Lease, Payment
 from core.billing_engine import (
     STATUS_PAGADO,
     STATUS_PENDIENTE,
-    STATUS_ATRASADO,
-    get_spanish_month_name
+    STATUS_ATRASADO
 )
 from ui.theme_config import (
     COLOR_PAGADO,
-    COLOR_PENDIENTE,
-    COLOR_ATRASADO,
     COLOR_DISPONIBLE,
     COLOR_BANNER_WARNING,
-    BUTTON_HEIGHT,
     STATUS_DISPONIBLE,
     get_status_theme
 )
+
+
+def _make_icon_row(
+    icon_name: str,
+    text: str,
+    font_style: str = "Body2",
+    bold: bool = False,
+    theme_text_color: str = "Secondary",
+    text_color: Optional[Tuple[float, float, float, float]] = None,
+    icon_color: Optional[Tuple[float, float, float, float]] = None
+) -> MDBoxLayout:
+    """Crea una fila limpia con icono Material Design y etiqueta adaptable (sin emojis tofu)."""
+    row = MDBoxLayout(
+        orientation="horizontal",
+        size_hint_y=None,
+        adaptive_height=True,
+        spacing=dp(8)
+    )
+    resolved_icon_color = icon_color or text_color or (0.35, 0.35, 0.35, 1.0)
+    icon = MDIcon(
+        icon=icon_name,
+        theme_text_color="Custom",
+        text_color=resolved_icon_color,
+        font_size=dp(18),
+        size_hint=(None, None),
+        size=(dp(20), dp(22)),
+        pos_hint={"center_y": 0.5}
+    )
+    label_kwargs = {
+        "text": text,
+        "font_style": font_style,
+        "bold": bold,
+        "adaptive_height": True,
+        "theme_text_color": "Custom" if text_color else theme_text_color,
+    }
+    if text_color:
+        label_kwargs["text_color"] = text_color
+    label = MDLabel(**label_kwargs)
+    row.add_widget(icon)
+    row.add_widget(label)
+    return row
 
 
 class BackupWarningBanner(MDCard):
@@ -39,42 +75,43 @@ class BackupWarningBanner(MDCard):
         super().__init__(**kwargs)
         self.orientation = "vertical"
         self.size_hint_y = None
-        self.height = dp(110)
-        self.padding = [dp(16), dp(12), dp(16), dp(12)]
-        self.spacing = dp(8)
+        self.adaptive_height = True
+        self.padding = [dp(16), dp(14), dp(16), dp(14)]
+        self.spacing = dp(10)
         self.radius = [dp(12)]
         self.elevation = 3
         self.md_bg_color = COLOR_BANNER_WARNING
 
-        # Fila del mensaje con icono de alerta
         msg_layout = MDBoxLayout(
             orientation="horizontal",
             spacing=dp(10),
             size_hint_y=None,
-            height=dp(40)
+            adaptive_height=True
         )
 
         icon = MDIcon(
             icon="alert-octagon",
             theme_text_color="Custom",
             text_color=(1, 1, 1, 1),
+            font_size=dp(28),
             size_hint=(None, None),
-            size=(dp(36), dp(36))
+            size=(dp(32), dp(32)),
+            pos_hint={"center_y": 0.5}
         )
 
         label = MDLabel(
-            text="¡ALERTA DE SEGURIDAD!\nHace más de 6 meses no realiza un respaldo.",
+            text="ALERTA DE SEGURIDAD\nHace más de 6 meses no realiza un respaldo.",
             theme_text_color="Custom",
             text_color=(1, 1, 1, 1),
             bold=True,
-            font_style="Subtitle2"
+            font_style="Subtitle2",
+            adaptive_height=True
         )
 
         msg_layout.add_widget(icon)
         msg_layout.add_widget(label)
         self.add_widget(msg_layout)
 
-        # Botón de acción grande
         btn = MDRaisedButton(
             text="RESPALDAR AHORA MISMO",
             md_bg_color=(1, 1, 1, 1),
@@ -88,54 +125,65 @@ class BackupWarningBanner(MDCard):
 
 class StatusBadge(MDBoxLayout):
     """
-    Insignia de estado con color, icono y texto grande.
+    Insignia de estado de una sola línea con icono, contraste accesible y ancho adaptable.
     """
     def __init__(self, status: str, day_number: Optional[int] = None, **kwargs):
         super().__init__(**kwargs)
         self.orientation = "horizontal"
         self.size_hint = (None, None)
-        self.height = dp(36)
-        self.padding = [dp(12), dp(4), dp(12), dp(4)]
-        self.spacing = dp(6)
-        self.radius = [dp(18)]
+        self.height = dp(30)
+        self.padding = [dp(10), dp(4), dp(12), dp(4)]
+        self.spacing = dp(5)
+        self.radius = [dp(15)]
 
         theme = get_status_theme(status)
         self.md_bg_color = theme["color"]
+        badge_text_color = theme["text_color"]
 
         icon = MDIcon(
             icon=theme["icon"],
             theme_text_color="Custom",
-            text_color=(1, 1, 1, 1),
+            text_color=badge_text_color,
+            font_size=dp(16),
             size_hint=(None, None),
-            size=(dp(24), dp(24))
+            size=(dp(18), dp(18)),
+            pos_hint={"center_y": 0.5}
         )
         self.add_widget(icon)
 
         label_text = theme["label"]
         if status == STATUS_PENDIENTE and day_number is not None:
-            label_text = f"PENDIENTE (Día {day_number} de 5)"
+            label_text = f"PENDIENTE · Día {day_number}/5"
         elif status == STATUS_ATRASADO and day_number is not None:
-            label_text = f"ATRASADO (Día {day_number})"
+            label_text = f"ATRASADO · Día {day_number}"
 
         text = MDLabel(
             text=label_text,
             theme_text_color="Custom",
-            text_color=(1, 1, 1, 1),
+            text_color=badge_text_color,
             bold=True,
             font_style="Caption",
-            size_hint_x=None
+            adaptive_size=True,
+            pos_hint={"center_y": 0.5},
+            shorten=False
         )
-        text.bind(texture_size=lambda instance, value: setattr(instance, 'width', value[0]))
+
+        def _update_width(instance, value):
+            text_w = value[0]
+            if text_w > 0:
+                self.width = dp(10) + dp(18) + dp(5) + text_w + dp(12)
+
+        text.bind(texture_size=_update_width)
         self.add_widget(text)
 
-        # Ajustar ancho del badge automáticamente
-        self.width = dp(60) + (len(label_text) * dp(8))
+        # Ancho inicial estimado previo al primer layout
+        self.width = dp(46) + (len(label_text) * dp(7))
 
 
 class RoomCard(MDCard):
     """
-    Tarjeta de habitación codificada por color con objetivos táctiles amplios (mínimo 48-52dp)
-    para uso cómodo por parte de operadores no técnicos en Android.
+    Tarjeta de habitación codificada por color con altura adaptable, iconografía Material Design
+    y botones táctiles amplios (mínimo 48dp) para uso móvil cómodo.
     """
     def __init__(
         self,
@@ -159,168 +207,190 @@ class RoomCard(MDCard):
         self.on_view_proof = on_view_proof
         self.orientation = "vertical"
         self.size_hint_y = None
-        self.padding = [dp(16), dp(14), dp(16), dp(14)]
+        self.adaptive_height = True
+        self.padding = [dp(14), dp(12), dp(14), dp(14)]
         self.spacing = dp(10)
         self.radius = [dp(14)]
         self.elevation = 2
 
-        # Borde coloreado para identificar inmediatamente el estado
         theme = get_status_theme(status)
         self.line_color = theme["color"]
         self.line_width = dp(2)
 
-        # 1. Cabecera de la tarjeta: Nombre del cuarto y Badge de Estado
+        # 1. Cabecera: Nombre del cuarto + Badge + Menú
         header = MDBoxLayout(
             orientation="horizontal",
             size_hint_y=None,
-            height=dp(40),
-            spacing=dp(8)
+            adaptive_height=True,
+            spacing=dp(6)
         )
 
         title = MDLabel(
             text=room.name,
             bold=True,
-            font_style="H6",
+            font_style="Subtitle1",
             theme_text_color="Primary",
-            size_hint_x=0.55
+            adaptive_height=True,
+            pos_hint={"center_y": 0.5}
         )
         header.add_widget(title)
 
-        badge = StatusBadge(status=status, day_number=current_day if lease else None)
+        badge = StatusBadge(
+            status=status,
+            day_number=current_day if lease else None,
+            pos_hint={"center_y": 0.5}
+        )
         header.add_widget(badge)
 
-        # Botón de menú de opciones del cuarto
         menu_btn = MDIconButton(
             icon="dots-vertical",
             size_hint=(None, None),
             size=(dp(36), dp(36)),
+            pos_hint={"center_y": 0.5},
             on_release=lambda x: on_menu_click(room, lease)
         )
         header.add_widget(menu_btn)
         self.add_widget(header)
 
-        # 2. Información del Inquilino y Renta
+        # 2. Información del inquilino o estado disponible (altura dinámica sin traslapes)
         info_box = MDBoxLayout(
             orientation="vertical",
             size_hint_y=None,
-            height=dp(78) if lease else dp(40),
-            spacing=dp(2)
+            adaptive_height=True,
+            spacing=dp(4)
         )
 
         if lease:
-            info_box.add_widget(MDLabel(
-                text=f"👤 Inquilino: {lease.tenant_name}",
+            info_box.add_widget(_make_icon_row(
+                icon_name="account",
+                text=lease.tenant_name,
                 font_style="Subtitle1",
-                bold=True
+                bold=True,
+                theme_text_color="Primary",
+                icon_color=(0.15, 0.35, 0.35, 1.0)
             ))
-            info_box.add_widget(MDLabel(
-                text=f"📞 WhatsApp: {lease.tenant_phone}  |  💵 Renta: ${lease.monthly_rent:,.2f}",
+            info_box.add_widget(_make_icon_row(
+                icon_name="phone",
+                text=f"WhatsApp: {lease.tenant_phone}  |  Renta: ${lease.monthly_rent:,.2f}",
                 font_style="Body2",
                 theme_text_color="Secondary"
             ))
-            info_box.add_widget(MDLabel(
-                text=f"🔒 Depósito: ${lease.deposit_amount:,.2f}",
+
+            has_id = bool(lease.id_front_path or lease.id_back_path)
+            dep_text = f"Depósito: ${lease.deposit_amount:,.2f}"
+            if has_id:
+                dep_text += "  |  INE registrada"
+            info_box.add_widget(_make_icon_row(
+                icon_name="card-account-details-outline" if has_id else "shield-lock-outline",
+                text=dep_text,
                 font_style="Caption",
                 theme_text_color="Secondary"
             ))
+
             if payment:
                 method_str = f"({payment.payment_method}) " if payment.payment_method else ""
-                info_box.add_widget(MDLabel(
-                    text=f"✓ Cubierto {method_str}el {payment.paid_date}",
+                info_box.add_widget(_make_icon_row(
+                    icon_name="check-circle-outline",
+                    text=f"Cubierto {method_str}el {payment.paid_date}",
                     font_style="Caption",
-                    theme_text_color="Custom",
+                    bold=True,
                     text_color=COLOR_PAGADO,
-                    bold=True
+                    icon_color=COLOR_PAGADO
                 ))
         else:
-            info_box.add_widget(MDLabel(
-                text=f"💵 Renta sugerida: ${room.default_rent:,.2f} al mes",
-                font_style="Subtitle1",
+            info_box.add_widget(_make_icon_row(
+                icon_name="cash",
+                text=f"Renta sugerida: ${room.default_rent:,.2f} / mes",
+                font_style="Subtitle2",
                 theme_text_color="Secondary"
             ))
             info_box.add_widget(MDLabel(
                 text="Sin contrato activo. Listo para asignación.",
                 font_style="Caption",
-                theme_text_color="Hint"
+                theme_text_color="Hint",
+                adaptive_height=True
             ))
 
         self.add_widget(info_box)
 
-        # 3. Acciones con botones táctiles grandes (>= 48dp)
+        # 3. Botones de acción (>= 48dp de alto con iconos Material Design reales)
         actions_box = MDBoxLayout(
             orientation="horizontal",
             size_hint_y=None,
-            height=dp(52),
-            spacing=dp(10)
+            height=dp(48),
+            spacing=dp(8)
         )
 
         if not lease:
-            # Cuarto disponible -> Asignar nuevo inquilino
-            btn_assign = MDRaisedButton(
-                text="➕ ASIGNAR INQUILINO",
+            btn_assign = MDFillRoundFlatIconButton(
+                text="ASIGNAR INQUILINO",
                 icon="account-plus",
                 size_hint=(1, 1),
                 md_bg_color=COLOR_DISPONIBLE,
-                font_size="16sp",
+                text_color=(1, 1, 1, 1),
+                icon_color=(1, 1, 1, 1),
+                font_size="15sp",
                 on_release=lambda x: on_assign_click(room)
             )
             actions_box.add_widget(btn_assign)
-            self.height = dp(175)
 
         elif status == STATUS_PAGADO:
             if payment and payment.proof_image_path and on_view_proof:
-                btn_proof = MDFlatButton(
-                    text="📷 COMPROBANTE",
-                    size_hint=(0.42, 1),
+                btn_proof = MDRectangleFlatIconButton(
+                    text="COMPROBANTE",
+                    icon="image-outline",
+                    size_hint=(0.46, 1),
                     on_release=lambda x: on_view_proof(payment.proof_image_path)
                 )
-                btn_receipt = MDFillRoundFlatButton(
-                    text="💬 WHATSAPP",
+                btn_receipt = MDFillRoundFlatIconButton(
+                    text="WHATSAPP",
                     icon="whatsapp",
-                    size_hint=(0.58, 1),
+                    size_hint=(0.54, 1),
                     md_bg_color=COLOR_PAGADO,
                     text_color=(1, 1, 1, 1),
+                    icon_color=(1, 1, 1, 1),
                     font_size="14sp",
                     on_release=lambda x: on_whatsapp_click(room, lease, status)
                 )
                 actions_box.add_widget(btn_proof)
                 actions_box.add_widget(btn_receipt)
             else:
-                btn_receipt = MDFillRoundFlatButton(
-                    text="💬 ENVIAR COMPROBANTE WHATSAPP",
+                btn_receipt = MDFillRoundFlatIconButton(
+                    text="ENVIAR COMPROBANTE",
                     icon="whatsapp",
                     size_hint=(1, 1),
                     md_bg_color=COLOR_PAGADO,
                     text_color=(1, 1, 1, 1),
+                    icon_color=(1, 1, 1, 1),
                     font_size="15sp",
                     on_release=lambda x: on_whatsapp_click(room, lease, status)
                 )
                 actions_box.add_widget(btn_receipt)
-            self.height = dp(215)
 
         else:
-            # Cuarto PENDIENTE o ATRASADO -> Botón de Pagar y Botón de WhatsApp
-            btn_pay = MDRaisedButton(
-                text="✓ PAGADO",
+            btn_pay = MDFillRoundFlatIconButton(
+                text="PAGADO",
                 icon="check-bold",
                 size_hint=(0.48, 1),
                 md_bg_color=COLOR_PAGADO,
+                text_color=(1, 1, 1, 1),
+                icon_color=(1, 1, 1, 1),
                 font_size="15sp",
                 on_release=lambda x: on_pay_click(room, lease)
             )
 
-            btn_wa = MDFillRoundFlatButton(
-                text="💬 COBRAR",
+            btn_wa = MDFillRoundFlatIconButton(
+                text="COBRAR",
                 icon="whatsapp",
                 size_hint=(0.52, 1),
                 md_bg_color=theme["color"],
-                text_color=(1, 1, 1, 1),
+                text_color=theme["text_color"],
+                icon_color=theme["text_color"],
                 font_size="15sp",
                 on_release=lambda x: on_whatsapp_click(room, lease, status)
             )
 
             actions_box.add_widget(btn_pay)
             actions_box.add_widget(btn_wa)
-            self.height = dp(215)
 
         self.add_widget(actions_box)

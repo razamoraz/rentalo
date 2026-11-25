@@ -20,6 +20,7 @@ from kivymd.uix.button import MDFloatingActionButton
 from kivymd.uix.label import MDLabel
 from kivymd.uix.card import MDCard
 from kivymd.uix.dialog import MDDialog
+from kivymd.uix.list import MDList, OneLineIconListItem, IconLeftWidget
 from kivymd.uix.button import MDFlatButton, MDRaisedButton
 
 from core.database import DatabaseManager
@@ -49,6 +50,7 @@ from ui.components import BackupWarningBanner, RoomCard
 from ui.dialogs import (
     show_new_room_dialog,
     show_assign_tenant_dialog,
+    show_tenant_id_dialog,
     show_confirm_payment_dialog,
     show_view_payment_proof_dialog,
     show_edit_lease_dialog,
@@ -92,6 +94,7 @@ class RenTaloApp(MDApp):
         year = self.reference_date.year
         self.top_bar = MDTopAppBar(
             title=f"renTalo - {month_name} {year}",
+            anchor_title="left",
             elevation=2,
             right_action_items=[
                 ["cloud-upload-outline", lambda x: self.open_backup_dialog(), "Respaldos y Excel"],
@@ -285,53 +288,60 @@ class RenTaloApp(MDApp):
             show_snackbar("No se pudo abrir WhatsApp.")
 
     def on_room_menu(self, room: Room, lease: Optional[Lease]) -> None:
-        """Menú de opciones adicionales para el cuarto."""
+        """Menú vertical de opciones adicionales para el cuarto (sin desbordamiento en móvil)."""
         dialog = None
-        buttons = []
+        menu_list = MDList()
+
+        def _add_option(text: str, icon: str, callback):
+            item = OneLineIconListItem(
+                text=text,
+                on_release=lambda x: [dialog.dismiss(), callback()]
+            )
+            item.add_widget(IconLeftWidget(icon=icon))
+            menu_list.add_widget(item)
 
         if lease:
-            buttons.append(
-                MDFlatButton(
-                    text="EDITAR CONTRATO",
-                    theme_text_color="Primary",
-                    on_release=lambda x: [dialog.dismiss(), show_edit_lease_dialog(self.db, room, lease, lambda l: self.refresh_ui())]
-                )
+            _add_option(
+                "Editar contrato",
+                "account-edit-outline",
+                lambda: show_edit_lease_dialog(self.db, room, lease, lambda l: self.refresh_ui())
             )
-            buttons.append(
-                MDFlatButton(
-                    text="📜 REGLAMENTO INTERNO (WHATSAPP)",
-                    theme_text_color="Custom",
-                    text_color=(0.12, 0.53, 0.53, 1.0),
-                    on_release=lambda x: [dialog.dismiss(), self.on_send_house_rules(lease)]
-                )
+            _add_option(
+                "Identificación (INE / ID)",
+                "card-account-details-outline",
+                lambda: show_tenant_id_dialog(self.db, room, lease, self.refresh_ui)
             )
-            buttons.append(
-                MDFlatButton(
-                    text="FINALIZAR CONTRATO Y FINIQUITO",
-                    theme_text_color="Custom",
-                    text_color=COLOR_BANNER_WARNING,
-                    on_release=lambda x: [dialog.dismiss(), show_end_lease_dialog(self.db, room, lease, self.refresh_ui)]
-                )
+            _add_option(
+                "Reglamento interno (WhatsApp)",
+                "file-document-outline",
+                lambda: self.on_send_house_rules(lease)
+            )
+            _add_option(
+                "Finalizar contrato y finiquito",
+                "cash-check",
+                lambda: show_end_lease_dialog(self.db, room, lease, self.refresh_ui)
             )
 
-        buttons.append(
-            MDFlatButton(
-                text="ELIMINAR CUARTO",
-                theme_text_color="Custom",
-                text_color=(0.5, 0.5, 0.5, 1),
-                on_release=lambda x: self._confirm_delete_room(dialog, room)
-            )
+        _add_option(
+            "Eliminar cuarto",
+            "delete-outline",
+            lambda: self._confirm_delete_room(None, room)
         )
-        buttons.append(
-            MDFlatButton(
-                text="CANCELAR",
-                on_release=lambda x: dialog.dismiss()
-            )
-        )
+
+        scroll_height = dp(245) if lease else dp(65)
+        scroll = MDScrollView(size_hint_y=None, height=scroll_height, do_scroll_x=False)
+        scroll.add_widget(menu_list)
 
         dialog = MDDialog(
             title=f"Opciones: {room.name}",
-            buttons=buttons
+            type="custom",
+            content_cls=scroll,
+            buttons=[
+                MDFlatButton(
+                    text="CERRAR",
+                    on_release=lambda x: dialog.dismiss()
+                )
+            ]
         )
         dialog.open()
 

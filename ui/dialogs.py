@@ -1,9 +1,18 @@
 from datetime import date
+from pathlib import Path
 from typing import Callable, Optional
 from kivy.metrics import dp
+from kivy.uix.image import Image
 from kivymd.uix.dialog import MDDialog
-from kivymd.uix.button import MDFlatButton, MDRaisedButton
+from kivymd.uix.button import (
+    MDFlatButton,
+    MDRaisedButton,
+    MDRectangleFlatIconButton,
+    MDFillRoundFlatIconButton,
+    MDIconButton
+)
 from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.textfield import MDTextField
 from kivymd.uix.label import MDLabel
 from kivymd.uix.snackbar import MDSnackbar
@@ -13,12 +22,12 @@ from core.database import DatabaseManager
 from core.settlement_engine import (
     calculate_settlement,
     build_settlement_whatsapp_message,
+    DEFAULT_DEDUCTION_CONCEPTS,
     STATUS_REFUND_TO_TENANT,
     STATUS_EXACT_BALANCE
 )
 from core.billing_engine import (
     get_spanish_month_name,
-    STATUS_PAGADO,
     calculate_proportional_rent,
     build_welcome_lease_message
 )
@@ -26,7 +35,6 @@ from core.backup_manager import (
     export_payments_csv,
     export_rooms_status_csv,
     export_database_to_json,
-    import_database_from_json,
     merge_database_from_json,
     record_backup_completed,
     get_last_backup_date
@@ -36,23 +44,91 @@ from ui.android_bridge import (
     share_file,
     open_whatsapp,
     save_payment_proof,
+    save_tenant_id_photo,
+    pick_image_file,
+    capture_camera_photo,
     view_image_file
 )
-from ui.theme_config import COLOR_PAGADO, COLOR_BANNER_WARNING, BUTTON_HEIGHT
+from ui.theme_config import COLOR_PAGADO, COLOR_BANNER_WARNING
 
 
 def show_snackbar(text: str) -> None:
-    """Muestra un mensaje emergente sencillo y legible."""
+    """Muestra un mensaje emergente limpio separado del botón flotante."""
     snackbar = MDSnackbar(
         MDLabel(
             text=text,
             theme_text_color="Custom",
             text_color=(1, 1, 1, 1),
-            bold=True
+            bold=True,
+            adaptive_height=True
         ),
+        snackbar_x="12dp",
+        snackbar_y="16dp",
+        size_hint_x=0.92,
         duration=3
     )
     snackbar.open()
+
+
+def show_image_viewer_dialog(title: str, image_path: str) -> MDDialog:
+    """
+    Visor emergente offline dentro de la app para consultar fotos de INE o comprobantes
+    sin depender de apps externas ni Uri.fromFile en Android 7-14.
+    """
+    path_obj = Path(image_path)
+    content = MDBoxLayout(
+        orientation="vertical",
+        spacing=dp(8),
+        size_hint_y=None,
+        height=dp(360) if path_obj.exists() else dp(120)
+    )
+
+    if path_obj.exists():
+        img = Image(
+            source=str(path_obj.resolve()),
+            allow_stretch=True,
+            keep_ratio=True,
+            size_hint=(1, None),
+            height=dp(310)
+        )
+        content.add_widget(img)
+        content.add_widget(MDLabel(
+            text=f"Archivo local: {path_obj.name}",
+            font_style="Caption",
+            theme_text_color="Secondary",
+            adaptive_height=True
+        ))
+    else:
+        content.add_widget(MDLabel(
+            text=f"No se encontró el archivo en el dispositivo:\n{image_path}",
+            font_style="Body2",
+            theme_text_color="Secondary",
+            adaptive_height=True
+        ))
+
+    dialog = None
+    buttons = [
+        MDFlatButton(
+            text="CERRAR",
+            on_release=lambda x: dialog.dismiss()
+        )
+    ]
+    if path_obj.exists():
+        buttons.append(
+            MDFlatButton(
+                text="ABRIR EXTERNO",
+                on_release=lambda x: view_image_file(str(path_obj))
+            )
+        )
+
+    dialog = MDDialog(
+        title=title,
+        type="custom",
+        content_cls=content,
+        buttons=buttons
+    )
+    dialog.open()
+    return dialog
 
 
 def show_new_room_dialog(db: DatabaseManager, on_created: Callable[[Room], None]) -> MDDialog:
@@ -61,7 +137,7 @@ def show_new_room_dialog(db: DatabaseManager, on_created: Callable[[Room], None]
         orientation="vertical",
         spacing=dp(12),
         size_hint_y=None,
-        height=dp(140)
+        height=dp(145)
     )
 
     name_field = MDTextField(
@@ -124,37 +200,47 @@ def show_assign_tenant_dialog(
     room: Room,
     on_assigned: Callable[[Lease], None]
 ) -> MDDialog:
-    """Diálogo para iniciar un contrato con depósito y ajuste proporcional para el primer mes."""
+    """Diálogo deslizable para iniciar contrato con depósito, cobro proporcional e INE opcional."""
     today = date.today()
     suggested_initial_rent = calculate_proportional_rent(room.default_rent, today)
 
-    content = MDBoxLayout(
+    scroll = MDScrollView(size_hint_y=None, height=dp(380), do_scroll_x=False)
+    form_box = MDBoxLayout(
         orientation="vertical",
-        spacing=dp(8),
+        spacing=dp(10),
         size_hint_y=None,
-        height=dp(310)
+        adaptive_height=True,
+        padding=[0, dp(4), 0, dp(8)]
     )
 
     tenant_name_field = MDTextField(
         hint_text="Nombre completo del inquilino",
-        required=True
+        required=True,
+        size_hint_y=None,
+        height=dp(56)
     )
     phone_field = MDTextField(
         hint_text="Teléfono WhatsApp (ej. 5512345678)",
         required=True,
-        input_filter="int"
+        input_filter="int",
+        size_hint_y=None,
+        height=dp(56)
     )
     rent_field = MDTextField(
         hint_text="Renta mensual regular ($)",
         text=str(int(room.default_rent)),
         input_filter="float",
-        required=True
+        required=True,
+        size_hint_y=None,
+        height=dp(56)
     )
     deposit_field = MDTextField(
         hint_text="Depósito en garantía recibido ($)",
         text=str(int(room.default_rent)),
         input_filter="float",
-        required=True
+        required=True,
+        size_hint_y=None,
+        height=dp(56)
     )
 
     helper_txt = "Cobro proporcional sugerido por días restantes" if today.day > 5 else "Cobro del primer mes completo"
@@ -164,14 +250,54 @@ def show_assign_tenant_dialog(
         helper_text=helper_txt,
         helper_text_mode="persistent",
         input_filter="float",
-        required=True
+        required=True,
+        size_hint_y=None,
+        height=dp(68)
     )
 
-    content.add_widget(tenant_name_field)
-    content.add_widget(phone_field)
-    content.add_widget(rent_field)
-    content.add_widget(deposit_field)
-    content.add_widget(initial_rent_field)
+    id_state = {"front": None, "back": None}
+    ine_status_label = MDLabel(
+        text="Identificación (INE) opcional: sin fotos adjuntas",
+        font_style="Caption",
+        theme_text_color="Secondary",
+        adaptive_height=True
+    )
+
+    def _refresh_ine_label():
+        f_txt = "Frente listo" if id_state["front"] else "Sin frente"
+        b_txt = "Reverso listo" if id_state["back"] else "Sin reverso"
+        ine_status_label.text = f"INE (opcional): {f_txt} | {b_txt}"
+
+    def _select_ine(side: str):
+        def _on_picked(path: Optional[str]):
+            if path:
+                id_state[side] = path
+                _refresh_ine_label()
+                show_snackbar(f"Foto de INE ({'frente' if side == 'front' else 'reverso'}) adjuntada.")
+        pick_image_file(_on_picked)
+
+    ine_row = MDBoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(42))
+    ine_row.add_widget(MDRectangleFlatIconButton(
+        text="INE FRENTE",
+        icon="card-account-details-outline",
+        size_hint=(0.5, 1),
+        on_release=lambda x: _select_ine("front")
+    ))
+    ine_row.add_widget(MDRectangleFlatIconButton(
+        text="INE REVERSO",
+        icon="card-text-outline",
+        size_hint=(0.5, 1),
+        on_release=lambda x: _select_ine("back")
+    ))
+
+    form_box.add_widget(tenant_name_field)
+    form_box.add_widget(phone_field)
+    form_box.add_widget(rent_field)
+    form_box.add_widget(deposit_field)
+    form_box.add_widget(initial_rent_field)
+    form_box.add_widget(ine_status_label)
+    form_box.add_widget(ine_row)
+    scroll.add_widget(form_box)
 
     dialog = None
 
@@ -201,13 +327,27 @@ def show_assign_tenant_dialog(
                 deposit_amount=deposit_amount,
                 initial_rent=initial_rent
             )
+
+            # Comprimir y guardar fotos de INE si se adjuntaron
+            front_saved = None
+            back_saved = None
+            if id_state["front"] and lease.id is not None:
+                front_saved = save_tenant_id_photo(id_state["front"], lease.id, "frente")
+            if id_state["back"] and lease.id is not None:
+                back_saved = save_tenant_id_photo(id_state["back"], lease.id, "reverso")
+            if front_saved or back_saved:
+                lease = db.update_lease(
+                    lease.id,
+                    id_front_path=front_saved,
+                    id_back_path=back_saved
+                )
+
             if dialog:
                 dialog.dismiss()
 
             show_snackbar(f"Inquilino '{tenant_name}' asignado a {room.name}.")
             on_assigned(lease)
 
-            # Enviar bienvenida con desglose inicial por WhatsApp
             welcome_msg = build_welcome_lease_message(
                 tenant_name=tenant_name,
                 room_name=room.name,
@@ -221,9 +361,9 @@ def show_assign_tenant_dialog(
             show_snackbar(f"Error: {e}")
 
     dialog = MDDialog(
-        title=f"Asignar Inquilino a {room.name}",
+        title=f"Asignar Inquilino: {room.name}",
         type="custom",
-        content_cls=content,
+        content_cls=scroll,
         buttons=[
             MDFlatButton(
                 text="CANCELAR",
@@ -240,48 +380,205 @@ def show_assign_tenant_dialog(
     return dialog
 
 
+def show_tenant_id_dialog(
+    db: DatabaseManager,
+    room: Room,
+    lease: Lease,
+    on_updated: Callable[[], None]
+) -> MDDialog:
+    """
+    Diálogo dedicado para capturar, comprimir y consultar offline las fotos frontal y trasera
+    de la identificación (INE / ID) del inquilino.
+    """
+    scroll = MDScrollView(size_hint_y=None, height=dp(320), do_scroll_x=False)
+    content = MDBoxLayout(
+        orientation="vertical",
+        spacing=dp(12),
+        size_hint_y=None,
+        adaptive_height=True,
+        padding=[0, dp(4), 0, dp(8)]
+    )
+
+    content.add_widget(MDLabel(
+        text=f"Cuarto: {room.name}  |  Inquilino: {lease.tenant_name}",
+        font_style="Body2",
+        bold=True,
+        adaptive_height=True
+    ))
+
+    state = {
+        "front": lease.id_front_path,
+        "back": lease.id_back_path
+    }
+
+    front_status = MDLabel(text="", font_style="Caption", theme_text_color="Secondary", adaptive_height=True)
+    back_status = MDLabel(text="", font_style="Caption", theme_text_color="Secondary", adaptive_height=True)
+    btn_view_front = MDIconButton(icon="eye-outline", size_hint=(None, None), size=(dp(36), dp(36)))
+    btn_view_back = MDIconButton(icon="eye-outline", size_hint=(None, None), size=(dp(36), dp(36)))
+
+    def refresh_labels():
+        f_ok = bool(state["front"] and Path(state["front"]).exists())
+        b_ok = bool(state["back"] and Path(state["back"]).exists())
+        front_status.text = f"INE Frente: {'Guardada offline' if state['front'] else 'Pendiente'}"
+        back_status.text = f"INE Reverso: {'Guardado offline' if state['back'] else 'Pendiente'}"
+        btn_view_front.disabled = not bool(state["front"])
+        btn_view_back.disabled = not bool(state["back"])
+        if state["front"] and not f_ok:
+            front_status.text = f"INE Frente: ruta registrada ({Path(state['front']).name})"
+        if state["back"] and not b_ok:
+            back_status.text = f"INE Reverso: ruta registrada ({Path(state['back']).name})"
+
+    def handle_capture(side: str, use_camera: bool):
+        def _save_from_path(src_path: Optional[str]):
+            if not src_path:
+                return
+            try:
+                saved = save_tenant_id_photo(src_path, lease.id, "frente" if side == "front" else "reverso")
+                state[side] = saved
+                if side == "front":
+                    db.update_lease(lease.id, id_front_path=saved)
+                else:
+                    db.update_lease(lease.id, id_back_path=saved)
+                refresh_labels()
+                on_updated()
+                show_snackbar(f"INE ({'frente' if side == 'front' else 'reverso'}) guardada y optimizada.")
+            except Exception as e:
+                show_snackbar(f"Error al guardar foto: {e}")
+
+        if use_camera:
+            ok = capture_camera_photo(_save_from_path, filename_prefix=f"ine_{lease.id}_{side}")
+            if not ok:
+                show_snackbar("Cámara no disponible en este equipo; use Galería.")
+        else:
+            pick_image_file(_save_from_path)
+
+    btn_view_front.on_release = lambda: show_image_viewer_dialog(
+        f"INE Frente - {lease.tenant_name}", state["front"]
+    ) if state["front"] else None
+    btn_view_back.on_release = lambda: show_image_viewer_dialog(
+        f"INE Reverso - {lease.tenant_name}", state["back"]
+    ) if state["back"] else None
+
+    # Sección Frente
+    front_header = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(36), spacing=dp(4))
+    front_status.pos_hint = {"center_y": 0.5}
+    front_header.add_widget(front_status)
+    front_header.add_widget(btn_view_front)
+    content.add_widget(front_header)
+
+    front_row = MDBoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(42))
+    front_row.add_widget(MDFillRoundFlatIconButton(
+        text="GALERÍA",
+        icon="image-plus",
+        size_hint=(0.5, 1),
+        text_color=(1, 1, 1, 1),
+        icon_color=(1, 1, 1, 1),
+        on_release=lambda x: handle_capture("front", use_camera=False)
+    ))
+    front_row.add_widget(MDRectangleFlatIconButton(
+        text="CÁMARA",
+        icon="camera",
+        size_hint=(0.5, 1),
+        on_release=lambda x: handle_capture("front", use_camera=True)
+    ))
+    content.add_widget(front_row)
+
+    # Sección Reverso
+    back_header = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(36), spacing=dp(4))
+    back_status.pos_hint = {"center_y": 0.5}
+    back_header.add_widget(back_status)
+    back_header.add_widget(btn_view_back)
+    content.add_widget(back_header)
+
+    back_row = MDBoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(42))
+    back_row.add_widget(MDFillRoundFlatIconButton(
+        text="GALERÍA",
+        icon="image-plus",
+        size_hint=(0.5, 1),
+        text_color=(1, 1, 1, 1),
+        icon_color=(1, 1, 1, 1),
+        on_release=lambda x: handle_capture("back", use_camera=False)
+    ))
+    back_row.add_widget(MDRectangleFlatIconButton(
+        text="CÁMARA",
+        icon="camera",
+        size_hint=(0.5, 1),
+        on_release=lambda x: handle_capture("back", use_camera=True)
+    ))
+    content.add_widget(back_row)
+
+    refresh_labels()
+    scroll.add_widget(content)
+
+    dialog = None
+    dialog = MDDialog(
+        title="Identificación (INE / ID)",
+        type="custom",
+        content_cls=scroll,
+        buttons=[
+            MDFlatButton(
+                text="CERRAR",
+                on_release=lambda x: dialog.dismiss()
+            )
+        ]
+    )
+    dialog.open()
+    return dialog
+
+
 def show_edit_lease_dialog(
     db: DatabaseManager,
     room: Room,
     lease: Lease,
     on_updated: Callable[[Lease], None]
 ) -> MDDialog:
-    """Diálogo para corregir errores o actualizar datos del inquilino y contrato."""
+    """Diálogo deslizable para corregir datos del inquilino y contrato."""
+    scroll = MDScrollView(size_hint_y=None, height=dp(300), do_scroll_x=False)
     content = MDBoxLayout(
         orientation="vertical",
-        spacing=dp(8),
+        spacing=dp(10),
         size_hint_y=None,
-        height=dp(270)
+        adaptive_height=True,
+        padding=[0, dp(4), 0, dp(8)]
     )
 
     tenant_name_field = MDTextField(
         hint_text="Nombre del inquilino",
         text=lease.tenant_name,
-        required=True
+        required=True,
+        size_hint_y=None,
+        height=dp(56)
     )
     phone_field = MDTextField(
         hint_text="Teléfono WhatsApp",
         text=lease.tenant_phone,
         required=True,
-        input_filter="int"
+        input_filter="int",
+        size_hint_y=None,
+        height=dp(56)
     )
     rent_field = MDTextField(
         hint_text="Renta mensual acordada ($)",
         text=str(int(lease.monthly_rent)),
         input_filter="float",
-        required=True
+        required=True,
+        size_hint_y=None,
+        height=dp(56)
     )
     deposit_field = MDTextField(
         hint_text="Depósito en garantía ($)",
         text=str(int(lease.deposit_amount)),
         input_filter="float",
-        required=True
+        required=True,
+        size_hint_y=None,
+        height=dp(56)
     )
 
     content.add_widget(tenant_name_field)
     content.add_widget(phone_field)
     content.add_widget(rent_field)
     content.add_widget(deposit_field)
+    scroll.add_widget(content)
 
     dialog = None
 
@@ -318,14 +615,14 @@ def show_edit_lease_dialog(
     dialog = MDDialog(
         title=f"Editar Contrato: {room.name}",
         type="custom",
-        content_cls=content,
+        content_cls=scroll,
         buttons=[
             MDFlatButton(
                 text="CANCELAR",
                 on_release=lambda x: dialog.dismiss()
             ),
             MDRaisedButton(
-                text="GUARDAR CAMBIOS",
+                text="GUARDAR",
                 md_bg_color=COLOR_PAGADO,
                 on_release=on_save
             )
@@ -346,7 +643,6 @@ def show_confirm_payment_dialog(
     month_name = get_spanish_month_name(reference_date.month)
     year = reference_date.year
 
-    # Si es el mes de inicio y se acordó cobro proporcional, usar ese monto
     try:
         start_dt = date.fromisoformat(lease.start_date)
         is_start_month = (start_dt.year == year and start_dt.month == reference_date.month)
@@ -355,58 +651,86 @@ def show_confirm_payment_dialog(
 
     if is_start_month and lease.initial_rent is not None:
         amount = lease.initial_rent
-        concepto = "Primer pago (cobro proporcional acordado)"
     else:
         amount = lease.monthly_rent
-        concepto = "Renta mensual regular"
 
-    # Estado local para método y comprobante
     payment_state = {
         "method": "TRANSFERENCIA",
         "proof_path": None
     }
 
+    scroll = MDScrollView(size_hint_y=None, height=dp(335), do_scroll_x=False)
     content = MDBoxLayout(
         orientation="vertical",
-        spacing=dp(8),
+        spacing=dp(10),
         size_hint_y=None,
-        height=dp(180)
+        adaptive_height=True,
+        padding=[0, dp(4), 0, dp(4)]
     )
 
     info_label = MDLabel(
         text=(
-            f"🏠 Cuarto: {room.name}\n"
-            f"👤 Inquilino: {lease.tenant_name}\n"
-            f"📅 Mes: {month_name.capitalize()} {year}\n"
-            f"💵 Monto a registrar: ${amount:,.2f}"
+            f"Cuarto: {room.name}\n"
+            f"Inquilino: {lease.tenant_name}\n"
+            f"Mes: {month_name.capitalize()} {year}\n"
+            f"Monto a registrar: ${amount:,.2f}"
         ),
         font_style="Body2",
-        size_hint_y=None,
-        height=dp(70)
+        adaptive_height=True
     )
     content.add_widget(info_label)
 
-    # Selector de método de pago
-    method_box = MDBoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(38))
+    # Selector de método de pago con contraste claro
+    method_box = MDBoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(42))
     btn_trans = MDRaisedButton(
         text="TRANSFERENCIA",
         size_hint=(0.5, 1),
-        md_bg_color=COLOR_PAGADO
+        md_bg_color=COLOR_PAGADO,
+        text_color=(1, 1, 1, 1)
     )
-    btn_cash = MDFlatButton(
+    btn_cash = MDRaisedButton(
         text="EFECTIVO",
-        size_hint=(0.5, 1)
+        size_hint=(0.5, 1),
+        md_bg_color=(0.88, 0.88, 0.88, 1),
+        text_color=(0.2, 0.2, 0.2, 1)
+    )
+
+    proof_label = MDLabel(
+        text="Sin captura adjunta (opcional)",
+        font_style="Caption",
+        theme_text_color="Secondary",
+        adaptive_height=True
+    )
+
+    def pick_proof_file():
+        def _on_picked(selected: Optional[str]):
+            if selected:
+                payment_state["proof_path"] = selected
+                proof_label.text = f"Adjunto: {Path(selected).name}"
+                show_snackbar(f"Comprobante seleccionado: {Path(selected).name}")
+        pick_image_file(_on_picked)
+
+    proof_btn = MDRectangleFlatIconButton(
+        text="ADJUNTAR COMPROBANTE",
+        icon="image-plus",
+        size_hint=(1, None),
+        height=dp(42),
+        on_release=lambda x: pick_proof_file()
     )
 
     def set_method(m: str):
         payment_state["method"] = m
         if m == "TRANSFERENCIA":
             btn_trans.md_bg_color = COLOR_PAGADO
-            btn_cash.md_bg_color = (0, 0, 0, 0)
+            btn_trans.text_color = (1, 1, 1, 1)
+            btn_cash.md_bg_color = (0.88, 0.88, 0.88, 1)
+            btn_cash.text_color = (0.2, 0.2, 0.2, 1)
             proof_btn.disabled = False
         else:
-            btn_cash.md_bg_color = (0.5, 0.5, 0.5, 0.2)
-            btn_trans.md_bg_color = (0.5, 0.5, 0.5, 0.2)
+            btn_cash.md_bg_color = COLOR_PAGADO
+            btn_cash.text_color = (1, 1, 1, 1)
+            btn_trans.md_bg_color = (0.88, 0.88, 0.88, 1)
+            btn_trans.text_color = (0.2, 0.2, 0.2, 1)
             proof_btn.disabled = True
 
     btn_trans.on_release = lambda: set_method("TRANSFERENCIA")
@@ -414,39 +738,6 @@ def show_confirm_payment_dialog(
     method_box.add_widget(btn_trans)
     method_box.add_widget(btn_cash)
     content.add_widget(method_box)
-
-    # Indicador y botón para adjuntar captura
-    proof_label = MDLabel(
-        text="Sin captura adjunta (opcional)",
-        font_style="Caption",
-        theme_text_color="Secondary",
-        size_hint_y=None,
-        height=dp(20)
-    )
-
-    def pick_proof_file():
-        # En entorno de pruebas / escritorio busca imágenes recientes en descargas o solicita archivo
-        try:
-            folder = get_export_directory()
-            # Buscar si hay imágenes en la carpeta o usar un diálogo simple
-            imgs = sorted(folder.glob("*.jpg")) + sorted(folder.glob("*.png"))
-            if imgs:
-                payment_state["proof_path"] = str(imgs[0])
-                proof_label.text = f"📷 Adjunto: {imgs[0].name}"
-                show_snackbar(f"Comprobante seleccionado: {imgs[0].name}")
-            else:
-                proof_label.text = "📷 Comprobante registrado"
-                payment_state["proof_path"] = "comprobantes_pagos/captura_transferencia.jpg"
-                show_snackbar("Captura de pantalla lista para vincular.")
-        except Exception as e:
-            show_snackbar(f"Error al seleccionar imagen: {e}")
-
-    proof_btn = MDFlatButton(
-        text="📷 ADJUNTAR CAPTURA DE TRANSFERENCIA",
-        size_hint=(1, None),
-        height=dp(38),
-        on_release=lambda x: pick_proof_file()
-    )
     content.add_widget(proof_label)
     content.add_widget(proof_btn)
 
@@ -492,24 +783,33 @@ def show_confirm_payment_dialog(
         except Exception as e:
             show_snackbar(f"Error al registrar pago: {e}")
 
+    content.add_widget(MDFillRoundFlatIconButton(
+        text="PAGAR Y NOTIFICAR WHATSAPP",
+        icon="whatsapp",
+        size_hint=(1, None),
+        height=dp(44),
+        md_bg_color=COLOR_PAGADO,
+        text_color=(1, 1, 1, 1),
+        icon_color=(1, 1, 1, 1),
+        on_release=lambda x: do_record_payment(send_whatsapp=True)
+    ))
+    content.add_widget(MDRectangleFlatIconButton(
+        text="SOLO REGISTRAR PAGO",
+        icon="check-bold",
+        size_hint=(1, None),
+        height=dp(42),
+        on_release=lambda x: do_record_payment(send_whatsapp=False)
+    ))
+    scroll.add_widget(content)
+
     dialog = MDDialog(
         title="Registrar Pago de Renta",
         type="custom",
-        content_cls=content,
+        content_cls=scroll,
         buttons=[
             MDFlatButton(
                 text="CANCELAR",
                 on_release=lambda x: dialog.dismiss()
-            ),
-            MDFlatButton(
-                text="SÓLO REGISTRAR",
-                on_release=lambda x: do_record_payment(send_whatsapp=False)
-            ),
-            MDRaisedButton(
-                text="PAGAR Y NOTIFICAR",
-                icon="whatsapp",
-                md_bg_color=COLOR_PAGADO,
-                on_release=lambda x: do_record_payment(send_whatsapp=True)
             )
         ]
     )
@@ -518,34 +818,8 @@ def show_confirm_payment_dialog(
 
 
 def show_view_payment_proof_dialog(proof_image_path: str) -> MDDialog:
-    """Muestra un diálogo para consultar o abrir el comprobante de transferencia guardado."""
-    dialog = None
-
-    def open_viewer():
-        success = view_image_file(proof_image_path)
-        if not success:
-            show_snackbar(f"Ubicación del archivo:\n{proof_image_path}")
-        if dialog:
-            dialog.dismiss()
-
-    dialog = MDDialog(
-        title="Comprobante de Pago",
-        text=f"Archivo guardado localmente:\n\n📁 {proof_image_path}\n\n¿Desea abrir la captura en el visor?",
-        buttons=[
-            MDFlatButton(
-                text="CERRAR",
-                on_release=lambda x: dialog.dismiss()
-            ),
-            MDRaisedButton(
-                text="ABRIR IMAGEN",
-                icon="image",
-                md_bg_color=COLOR_PAGADO,
-                on_release=lambda x: open_viewer()
-            )
-        ]
-    )
-    dialog.open()
-    return dialog
+    """Abre el visor offline integrado para consultar el comprobante de transferencia."""
+    return show_image_viewer_dialog("Comprobante de Pago", proof_image_path)
 
 
 def show_end_lease_dialog(
@@ -554,12 +828,17 @@ def show_end_lease_dialog(
     lease: Lease,
     on_ended: Callable[[], None]
 ) -> MDDialog:
-    """Diálogo interactivo para liquidar depósito, deducir daños y finalizar contrato con finiquito WhatsApp."""
+    """
+    Diálogo interactivo deslizable para liquidar depósito, elegir conceptos predefinidos o personalizados,
+    quitar deducciones y finalizar contrato con finiquito WhatsApp.
+    """
+    scroll = MDScrollView(size_hint_y=None, height=dp(400), do_scroll_x=False)
     content = MDBoxLayout(
         orientation="vertical",
-        spacing=dp(8),
+        spacing=dp(10),
         size_hint_y=None,
-        height=dp(380)
+        adaptive_height=True,
+        padding=[0, dp(4), 0, dp(8)]
     )
 
     deposit_val = float(lease.deposit_amount or 0.0)
@@ -567,14 +846,13 @@ def show_end_lease_dialog(
 
     header = MDLabel(
         text=(
-            f"🏠 [b]{room.name}[/b]  |  Inquilino: [b]{lease.tenant_name}[/b]\n"
-            f"💰 Depósito en garantía: [b]${deposit_val:,.2f}[/b]"
+            f"[b]{room.name}[/b]  |  Inquilino: [b]{lease.tenant_name}[/b]\n"
+            f"Depósito en garantía: [b]${deposit_val:,.2f}[/b]"
         ),
         markup=True,
         theme_text_color="Primary",
         font_style="Body2",
-        size_hint_y=None,
-        height=dp(36)
+        adaptive_height=True
     )
     content.add_widget(header)
 
@@ -582,36 +860,65 @@ def show_end_lease_dialog(
         hint_text="Concepto deducción (ej. Pintura, Llaves)",
         text="",
         size_hint_y=None,
-        height=dp(40)
+        height=dp(52)
     )
     content.add_widget(concept_input)
+
+    # Botones rápidos de conceptos frecuentes (DEFAULT_DEDUCTION_CONCEPTS)
+    presets_label = MDLabel(
+        text="Conceptos rápidos (toque para rellenar):",
+        font_style="Caption",
+        theme_text_color="Secondary",
+        adaptive_height=True
+    )
+    content.add_widget(presets_label)
+
+    presets_box = MDBoxLayout(
+        orientation="vertical",
+        spacing=dp(4),
+        size_hint_y=None,
+        adaptive_height=True
+    )
+    for preset in DEFAULT_DEDUCTION_CONCEPTS[:4]:
+        presets_box.add_widget(MDFlatButton(
+            text=f"+ {preset}",
+            theme_text_color="Primary",
+            size_hint=(1, None),
+            height=dp(32),
+            on_release=lambda x, c=preset: setattr(concept_input, "text", c)
+        ))
+    content.add_widget(presets_box)
 
     amount_input = MDTextField(
         hint_text="Monto a deducir ($)",
         text="",
         input_filter="float",
         size_hint_y=None,
-        height=dp(40)
+        height=dp(52)
     )
     content.add_widget(amount_input)
 
     summary_label = MDLabel(
-        text=f"Saldo neto a devolver al inquilino: ${deposit_val:,.2f}",
+        text=f"Saldo a devolver al inquilino: ${deposit_val:,.2f}",
         bold=True,
         theme_text_color="Custom",
         text_color=COLOR_PAGADO,
-        font_style="Caption",
-        size_hint_y=None,
-        height=dp(32)
+        font_style="Subtitle2",
+        adaptive_height=True
     )
 
-    deductions_summary = MDLabel(
-        text="Sin deducciones aplicadas (depósito íntegro).",
-        theme_text_color="Secondary",
-        font_style="Caption",
+    deductions_list_box = MDBoxLayout(
+        orientation="vertical",
+        spacing=dp(4),
         size_hint_y=None,
-        height=dp(45)
+        adaptive_height=True
     )
+
+    def remove_deduction(idx: int):
+        if 0 <= idx < len(deductions_list):
+            removed = deductions_list.pop(idx)
+            update_balance_display()
+            show_snackbar(f"Deducción eliminada: {removed.concept}")
 
     def update_balance_display():
         calc = calculate_settlement(deposit_val, deductions_list)
@@ -626,13 +933,31 @@ def show_end_lease_dialog(
             summary_label.text = f"Inquilino adeuda: ${calc['balance_due_by_tenant']:,.2f}"
             summary_label.text_color = COLOR_BANNER_WARNING
 
-        if deductions_list:
-            items_txt = "Deducciones: " + ", ".join(f"{d.concept} (-${d.amount:,.0f})" for d in deductions_list[-3:])
-            if len(deductions_list) > 3:
-                items_txt += f" (+{len(deductions_list)-3} más)"
-            deductions_summary.text = items_txt
+        deductions_list_box.clear_widgets()
+        if not deductions_list:
+            deductions_list_box.add_widget(MDLabel(
+                text="Sin deducciones aplicadas (depósito íntegro).",
+                theme_text_color="Secondary",
+                font_style="Caption",
+                adaptive_height=True
+            ))
         else:
-            deductions_summary.text = "Sin deducciones aplicadas (depósito íntegro)."
+            for idx, d in enumerate(deductions_list):
+                row = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(32), spacing=dp(4))
+                row.add_widget(MDLabel(
+                    text=f"• {d.concept}: -${d.amount:,.2f}",
+                    font_style="Caption",
+                    theme_text_color="Primary",
+                    pos_hint={"center_y": 0.5}
+                ))
+                row.add_widget(MDIconButton(
+                    icon="close-circle-outline",
+                    size_hint=(None, None),
+                    size=(dp(28), dp(28)),
+                    pos_hint={"center_y": 0.5},
+                    on_release=lambda x, i=idx: remove_deduction(i)
+                ))
+                deductions_list_box.add_widget(row)
 
     def add_deduction_item():
         c_text = concept_input.text.strip()
@@ -653,22 +978,23 @@ def show_end_lease_dialog(
         except ValueError:
             show_snackbar("Ingrese un monto numérico válido.")
 
-    btn_add_deduction = MDFlatButton(
-        text="+ AGREGAR DEDUCCIÓN AL FINIQUITO",
-        theme_text_color="Primary",
+    btn_add_deduction = MDRectangleFlatIconButton(
+        text="AGREGAR DEDUCCIÓN",
+        icon="plus-circle-outline",
         size_hint=(1, None),
-        height=dp(36),
+        height=dp(40),
         on_release=lambda x: add_deduction_item()
     )
     content.add_widget(btn_add_deduction)
     content.add_widget(summary_label)
-    content.add_widget(deductions_summary)
+    update_balance_display()
+    content.add_widget(deductions_list_box)
 
     notes_input = MDTextField(
         hint_text="Observaciones de entrega (opcional)",
         text="",
         size_hint_y=None,
-        height=dp(38)
+        height=dp(52)
     )
     content.add_widget(notes_input)
 
@@ -676,13 +1002,15 @@ def show_end_lease_dialog(
 
     def execute_settlement(send_whatsapp: bool):
         try:
-            today_str = date.today().isoformat()
+            today_dt = date.today()
+            today_str = today_dt.isoformat()
+            notes_val = notes_input.text.strip() or None
             db.finalize_lease_with_settlement(
                 lease_id=lease.id,
                 settlement_date=today_str,
                 deposit_total=deposit_val,
                 deductions=deductions_list,
-                notes=notes_input.text.strip() or None
+                notes=notes_val
             )
 
             if dialog:
@@ -695,34 +1023,45 @@ def show_end_lease_dialog(
                 msg = build_settlement_whatsapp_message(
                     tenant_name=lease.tenant_name,
                     room_name=room.name,
-                    settlement_date=date.today(),
+                    settlement_date=today_dt,
                     deposit_total=deposit_val,
                     deductions=deductions_list,
-                    notes=notes_input.text.strip() or None
+                    notes=notes_val
                 )
                 open_whatsapp(lease.tenant_phone, msg)
         except Exception as e:
             show_snackbar(f"Error al liquidar contrato: {e}")
 
+    content.add_widget(MDFillRoundFlatIconButton(
+        text="FINALIZAR Y ENVIAR WHATSAPP",
+        icon="whatsapp",
+        size_hint=(1, None),
+        height=dp(44),
+        md_bg_color=COLOR_PAGADO,
+        text_color=(1, 1, 1, 1),
+        icon_color=(1, 1, 1, 1),
+        on_release=lambda x: execute_settlement(send_whatsapp=True)
+    ))
+    content.add_widget(MDRectangleFlatIconButton(
+        text="FINALIZAR SIN WHATSAPP",
+        icon="check-circle-outline",
+        size_hint=(1, None),
+        height=dp(42),
+        text_color=COLOR_BANNER_WARNING,
+        line_color=COLOR_BANNER_WARNING,
+        icon_color=COLOR_BANNER_WARNING,
+        on_release=lambda x: execute_settlement(send_whatsapp=False)
+    ))
+    scroll.add_widget(content)
+
     dialog = MDDialog(
         title="Finiquito y Entrega de Cuarto",
         type="custom",
-        content_cls=content,
+        content_cls=scroll,
         buttons=[
             MDFlatButton(
                 text="CANCELAR",
                 on_release=lambda x: dialog.dismiss()
-            ),
-            MDFlatButton(
-                text="FINALIZAR SIN WHATSAPP",
-                theme_text_color="Custom",
-                text_color=COLOR_BANNER_WARNING,
-                on_release=lambda x: execute_settlement(send_whatsapp=False)
-            ),
-            MDRaisedButton(
-                text="FINALIZAR Y ENVIAR WHATSAPP",
-                md_bg_color=COLOR_PAGADO,
-                on_release=lambda x: execute_settlement(send_whatsapp=True)
             )
         ]
     )
@@ -735,12 +1074,12 @@ def show_backup_manager_dialog(
     reference_date: date,
     on_backup_completed: Callable[[], None]
 ) -> MDDialog:
-    """Diálogo completo de gestión de respaldos, exportación e integración multi-supervisor."""
+    """Diálogo compacto de respaldos, exportación Excel CSV e integración multi-supervisor."""
     content = MDBoxLayout(
         orientation="vertical",
-        spacing=dp(8),
+        spacing=dp(10),
         size_hint_y=None,
-        height=dp(280)
+        height=dp(248)
     )
 
     last_date = get_last_backup_date(db) or "Nunca realizado"
@@ -748,7 +1087,8 @@ def show_backup_manager_dialog(
         text=f"Último respaldo registrado: {last_date}",
         font_style="Caption",
         theme_text_color="Secondary",
-        bold=True
+        bold=True,
+        adaptive_height=True
     ))
 
     dialog = None
@@ -783,7 +1123,7 @@ def show_backup_manager_dialog(
             export_database_to_json(db, filepath)
             record_backup_completed(db, reference_date)
             share_file(str(filepath), title="Compartir archivo de respaldo")
-            show_snackbar("¡Respaldo completo generado y registrado!")
+            show_snackbar("Respaldo completo generado y registrado.")
             if dialog:
                 dialog.dismiss()
             on_backup_completed()
@@ -793,7 +1133,6 @@ def show_backup_manager_dialog(
     def merge_from_other_supervisor():
         try:
             folder = get_export_directory()
-            # Buscar el archivo de respaldo más reciente en la carpeta de exportaciones
             json_files = sorted(folder.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
             if not json_files:
                 show_snackbar(f"Coloque el archivo .json recibido en:\n{folder}")
@@ -803,7 +1142,8 @@ def show_backup_manager_dialog(
             stats = merge_database_from_json(db, latest_file)
             show_snackbar(
                 f"Datos combinados de {latest_file.name}:\n"
-                f"+{stats['rooms_merged']} cuartos, +{stats['leases_merged']} contratos, +{stats['payments_merged']} pagos."
+                f"+{stats['rooms_merged']} cuartos, +{stats['leases_merged']} contratos, "
+                f"+{stats['payments_merged']} pagos, +{stats.get('settlements_merged', 0)} finiquitos."
             )
             if dialog:
                 dialog.dismiss()
@@ -811,30 +1151,42 @@ def show_backup_manager_dialog(
         except Exception as e:
             show_snackbar(f"Error al combinar datos: {e}")
 
-    btn1 = MDRaisedButton(
-        text="📊 EXPORTAR PAGOS A EXCEL (CSV)",
+    btn1 = MDFillRoundFlatIconButton(
+        text="EXPORTAR PAGOS (CSV)",
+        icon="file-excel-outline",
         size_hint=(1, None),
         height=dp(44),
+        text_color=(1, 1, 1, 1),
+        icon_color=(1, 1, 1, 1),
         on_release=lambda x: export_payments()
     )
-    btn2 = MDRaisedButton(
-        text="🏠 EXPORTAR CUARTOS A EXCEL (CSV)",
+    btn2 = MDFillRoundFlatIconButton(
+        text="EXPORTAR CUARTOS (CSV)",
+        icon="home-export-outline",
         size_hint=(1, None),
         height=dp(44),
+        text_color=(1, 1, 1, 1),
+        icon_color=(1, 1, 1, 1),
         on_release=lambda x: export_rooms()
     )
-    btn3 = MDRaisedButton(
-        text="💾 CREAR RESPALDO COMPLETO (JSON)",
+    btn3 = MDFillRoundFlatIconButton(
+        text="CREAR RESPALDO (JSON)",
+        icon="content-save-outline",
         size_hint=(1, None),
         height=dp(44),
         md_bg_color=COLOR_PAGADO,
+        text_color=(1, 1, 1, 1),
+        icon_color=(1, 1, 1, 1),
         on_release=lambda x: create_full_backup()
     )
-    btn4 = MDRaisedButton(
-        text="👥 COMBINAR DATOS DE OTRO SUPERVISOR (MERGE)",
+    btn4 = MDFillRoundFlatIconButton(
+        text="COMBINAR OTRO SUPERVISOR",
+        icon="account-multiple-plus-outline",
         size_hint=(1, None),
         height=dp(44),
         md_bg_color=(0.12, 0.53, 0.53, 1.0),
+        text_color=(1, 1, 1, 1),
+        icon_color=(1, 1, 1, 1),
         on_release=lambda x: merge_from_other_supervisor()
     )
 

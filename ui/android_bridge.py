@@ -1,30 +1,162 @@
 import os
 import re
+import shutil
+import tempfile
 import urllib.parse
 import webbrowser
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Callable
 
 
-def save_payment_proof(source_path: str, lease_id: int, year: int, month: int) -> str:
+def get_media_directory(subfolder: str) -> Path:
     """
-    Guarda y organiza localmente la captura de pantalla o foto de comprobante de pago.
-    Almacena el archivo en la subcarpeta 'comprobantes_pagos/' y retorna la ruta relativa.
+    Retorna un directorio escribible y persistente para archivos multimedia locales
+    (comprobantes_pagos, fotos_inquilinos) compatible con Android, iOS y escritorio.
     """
-    import shutil
+    try:
+        from kivy.utils import platform
+        if platform == "ios":
+            base = Path.home() / "Documents" / "renTalo_Media"
+            dest = base / subfolder
+            dest.mkdir(parents=True, exist_ok=True)
+            return dest
+        elif platform == "android":
+            from android.storage import app_storage_path  # type: ignore
+            base = Path(app_storage_path())
+            dest = base / subfolder
+            dest.mkdir(parents=True, exist_ok=True)
+            return dest
+    except Exception:
+        pass
+
+    dest = Path(subfolder)
+    dest.mkdir(parents=True, exist_ok=True)
+    return dest
+
+
+def save_compressed_image(
+    source_path: str,
+    subfolder: str,
+    filename_stem: str,
+    max_dimension: int = 1280,
+    quality: int = 80
+) -> str:
+    """
+    Optimiza y guarda una imagen localmente en formato JPEG comprimido offline usando Pillow.
+    Si Pillow falla o el archivo no es una imagen decodificable, realiza copia directa segura.
+    """
     src = Path(source_path)
     if not src.exists():
         raise FileNotFoundError(f"El archivo fuente no existe: {source_path}")
 
-    ext = src.suffix.lower() or ".jpg"
-    dest_dir = Path("comprobantes_pagos")
-    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_dir = get_media_directory(subfolder)
 
-    dest_filename = f"pago_{lease_id}_{year}_{month:02d}{ext}"
-    dest_path = dest_dir / dest_filename
-    shutil.copy2(src, dest_path)
+    try:
+        from PIL import Image, ImageOps
+        dest_path = dest_dir / f"{filename_stem}.jpg"
+        with Image.open(src) as img:
+            img = ImageOps.exif_transpose(img)
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            elif img.mode == "L":
+                img = img.convert("RGB")
+            img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
+            img.save(dest_path, format="JPEG", quality=quality, optimize=True)
+        return str(dest_path)
+    except Exception:
+        ext = src.suffix.lower() or ".jpg"
+        dest_path = dest_dir / f"{filename_stem}{ext}"
+        shutil.copy2(src, dest_path)
+        return str(dest_path)
 
-    return str(dest_path)
+
+def save_payment_proof(source_path: str, lease_id: int, year: int, month: int) -> str:
+    """
+    Guarda y optimiza localmente la captura de pantalla o foto de comprobante de pago
+    en la carpeta 'comprobantes_pagos/'.
+    """
+    return save_compressed_image(
+        source_path=source_path,
+        subfolder="comprobantes_pagos",
+        filename_stem=f"pago_{lease_id}_{year}_{month:02d}"
+    )
+
+
+def save_tenant_id_photo(source_path: str, lease_id: int, side: str) -> str:
+    """
+    Guarda y comprime localmente la foto frontal o trasera de la INE / identificación
+    en la carpeta privada 'fotos_inquilinos/'.
+    """
+    side_clean = "frente" if side.lower() in ("front", "frente") else "reverso"
+    return save_compressed_image(
+        source_path=source_path,
+        subfolder="fotos_inquilinos",
+        filename_stem=f"ine_contrato_{lease_id}_{side_clean}"
+    )
+
+
+def pick_image_file(on_selected: Callable[[Optional[str]], None]) -> bool:
+    """
+    Abre el selector nativo de galería/archivos (Android/iOS/escritorio) para elegir una imagen.
+    Invoca on_selected(ruta) o on_selected(None) si se cancela.
+    """
+    try:
+        from plyer import filechooser  # type: ignore
+
+        def _handle(selection):
+            if selection and len(selection) > 0 and Path(selection[0]).exists():
+                on_selected(str(selection[0]))
+            else:
+                on_selected(None)
+
+        filechooser.open_file(
+            title="Seleccionar imagen",
+            filters=[["Imágenes", "*.png", "*.jpg", "*.jpeg", "*.webp"]],
+            on_selection=_handle
+        )
+        return True
+    except Exception:
+        pass
+
+    # Fallback escritorio con tkinter si está disponible
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        selected = filedialog.askopenfilename(
+            title="Seleccionar imagen",
+            filetypes=[("Imágenes", "*.png *.jpg *.jpeg *.webp"), ("Todos", "*.*")]
+        )
+        root.destroy()
+        on_selected(selected if selected else None)
+        return bool(selected)
+    except Exception:
+        on_selected(None)
+        return False
+
+
+def capture_camera_photo(on_captured: Callable[[Optional[str]], None], filename_prefix: str = "captura") -> bool:
+    """
+    Lanza la cámara nativa del dispositivo mediante plyer.camera y guarda la foto temporalmente
+    para ser comprimida. En escritorio sin cámara soportada retorna False de forma segura.
+    """
+    try:
+        from plyer import camera  # type: ignore
+        tmp_dir = Path(tempfile.gettempdir())
+        target = tmp_dir / f"{filename_prefix}.jpg"
+
+        def _done(filepath):
+            if filepath and Path(filepath).exists():
+                on_captured(str(filepath))
+            else:
+                on_captured(None)
+
+        camera.take_picture(filename=str(target), on_complete=_done)
+        return True
+    except Exception:
+        on_captured(None)
+        return False
 
 
 def view_image_file(image_path: str) -> bool:

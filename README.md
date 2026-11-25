@@ -42,28 +42,29 @@ Aplicación Android ultra-simple y 100% offline para la gestión mensual de rent
    - Idempotencia: Registra el envío en la base de datos para no saturar al usuario con avisos repetitivos en el mismo mes.
 
 7. **Finiquito de Depósito y Reglamento de la Casa por WhatsApp (Milestone 6):**
-   - **Calculadora interactiva de finiquito:** Permite aplicar deducciones justificadas (pintura, llaves extraviadas, aseo) al finalizar el contrato y ver en tiempo real el saldo a devolver.
+   - **Calculadora interactiva de finiquito:** Permite aplicar deducciones justificadas (pintura, llaves extraviadas, aseo) con conceptos rápidos al finalizar el contrato y ver en tiempo real el saldo a devolver.
    - **Comprobante formal de entrega:** Envío instantáneo por WhatsApp con desglose punto por punto y despedida cordial.
    - **Reglamento interno de convivencia:** Envío en 1 toque desde el menú del cuarto con las normas de silencio (10 PM - 7 AM), áreas comunes y puntualidad.
+
+8. **Identificación (INE / ID) y Visor Offline Integrado (Milestone 5):**
+   - **Captura y compresión local:** Adjunta foto frontal y trasera de INE desde galería o cámara, comprimidas en JPEG con Pillow en `fotos_inquilinos/`.
+   - **Visor integrado en la app:** Consulta tanto identificaciones (INE) como comprobantes de pago sin conexión y sin depender de apps externas.
 
 ---
 
 ## 🤖 CI/CD Automatizado con GitHub Actions
 
-El archivo `.github/workflows/build_apk.yml` automatiza:
+Los workflows `.github/workflows/build_apk.yml` y `.github/workflows/build_ios.yml` automatizan:
 1. **Ejecución de las pruebas unitarias** en display virtual Xvfb en `ubuntu-latest`.
 2. **Compilación automática del APK debug de Android** con `buildozer` en `ubuntu-22.04` (JDK 17 + Python 3.11).
-3. **Publicación del artefacto APK descargable** (`renTalo-Debug-APK`) en GitHub Actions en cada `push` a las ramas `main` y `master`.
+3. **Compilación del proyecto Xcode para iOS** mediante `kivy-ios` en `macos-15` con configuración automática de `Info.plist`.
+4. **Publicación de artefactos descargables** (`renTalo-Debug-APK` y `renTalo-iOS-Xcode-Project`) en GitHub Actions en cada `push` a las ramas `main` y `master`.
 
 ---
 
 ## 🗺️ Hoja de Ruta y Soporte Multiplataforma (Android / iOS)
 
-Consulta [ROADMAP.md](file:///home/razamoraz/Gitprog/rentalo/ROADMAP.md) para conocer el desglose detallado de los hitos completados y los que se encuentran en desarrollo:
-- Fotos de INE offline.
-- Finiquitos de depósito y recibos de entrega-recepción.
-- Calculadora de división de recibos CFE / agua.
-- Soporte multiplataforma Apple (iOS / macOS) mediante `kivy-ios` en runners macOS de GitHub Actions.
+Consulta [ROADMAP.md](file:///home/razamoraz/Gitprog/rentalo/ROADMAP.md) para conocer el desglose detallado de todos los hitos completados (1 al 6 y 8) y las decisiones de alcance del proyecto.
 
 ---
 
@@ -75,7 +76,7 @@ Para correr la suite de pruebas completa:
 .venv/bin/pytest -v tests/
 ```
 
-Todas las 53 pruebas cubren:
+Las **74 pruebas** cubren:
 - Operaciones CRUD y claves foráneas en SQLite.
 - Idempotencia de pagos por mes/año.
 - Cálculo de la ventana de pago (Día 1, Día 5, Día 6).

@@ -34,6 +34,8 @@ class Lease:
     is_active: bool = True
     deposit_amount: float = 0.0
     initial_rent: Optional[float] = None
+    id_front_path: Optional[str] = None
+    id_back_path: Optional[str] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -50,7 +52,9 @@ class Lease:
             end_date=data.get("end_date"),
             is_active=bool(data.get("is_active", True)),
             deposit_amount=float(data.get("deposit_amount", 0.0)),
-            initial_rent=float(data["initial_rent"]) if data.get("initial_rent") is not None else None
+            initial_rent=float(data["initial_rent"]) if data.get("initial_rent") is not None else None,
+            id_front_path=data.get("id_front_path"),
+            id_back_path=data.get("id_back_path")
         )
 
 

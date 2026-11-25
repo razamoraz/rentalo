@@ -14,6 +14,8 @@ COLOR_PENDIENTE: Tuple[float, float, float, float] = (0.97, 0.65, 0.09, 1.0)    
 COLOR_ATRASADO: Tuple[float, float, float, float] = (0.78, 0.16, 0.16, 1.0)     # Rojo Carmesí #C62828
 COLOR_DISPONIBLE: Tuple[float, float, float, float] = (0.37, 0.49, 0.54, 1.0)   # Gris Pizarra #546E7A
 COLOR_BANNER_WARNING: Tuple[float, float, float, float] = (0.84, 0.18, 0.14, 1.0) # Rojo Alerta #D32F2F
+COLOR_TEXT_DARK: Tuple[float, float, float, float] = (0.12, 0.12, 0.12, 1.0)
+COLOR_TEXT_LIGHT: Tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
 
 # Dimensiones táctiles mínimas para botones accesibles (para operadores no técnicos)
 MIN_TOUCH_HEIGHT = "48dp"
@@ -23,11 +25,12 @@ CARD_PADDING = "16dp"
 
 def get_status_theme(status: str) -> Dict[str, Any]:
     """
-    Retorna la configuración visual (color, etiqueta e icono) según el estado del cuarto.
+    Retorna la configuración visual (color, texto contrastado, etiqueta e icono) según el estado del cuarto.
     """
     if status == STATUS_PAGADO:
         return {
             "color": COLOR_PAGADO,
+            "text_color": COLOR_TEXT_LIGHT,
             "label": "PAGADO",
             "icon": "check-circle",
             "description": "Renta al corriente para este mes."
@@ -35,6 +38,7 @@ def get_status_theme(status: str) -> Dict[str, Any]:
     elif status == STATUS_PENDIENTE:
         return {
             "color": COLOR_PENDIENTE,
+            "text_color": COLOR_TEXT_DARK,
             "label": "PENDIENTE",
             "icon": "clock-alert-outline",
             "description": "Dentro de la ventana regular de los primeros 5 días."
@@ -42,6 +46,7 @@ def get_status_theme(status: str) -> Dict[str, Any]:
     elif status == STATUS_ATRASADO:
         return {
             "color": COLOR_ATRASADO,
+            "text_color": COLOR_TEXT_LIGHT,
             "label": "ATRASADO",
             "icon": "alert-circle",
             "description": "Han pasado más de 5 días naturales sin registrar pago."
@@ -49,6 +54,7 @@ def get_status_theme(status: str) -> Dict[str, Any]:
     else:
         return {
             "color": COLOR_DISPONIBLE,
+            "text_color": COLOR_TEXT_LIGHT,
             "label": "DISPONIBLE",
             "icon": "home-outline",
             "description": "Cuarto disponible para nuevo inquilino."

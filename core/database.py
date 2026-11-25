@@ -44,7 +44,9 @@ class DatabaseManager:
                     end_date TEXT,
                     is_active INTEGER NOT NULL DEFAULT 1,
                     deposit_amount REAL NOT NULL DEFAULT 0.0,
-                    initial_rent REAL
+                    initial_rent REAL,
+                    id_front_path TEXT,
+                    id_back_path TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS payments (
@@ -83,6 +85,10 @@ class DatabaseManager:
                 self.conn.execute("ALTER TABLE leases ADD COLUMN deposit_amount REAL NOT NULL DEFAULT 0.0")
             if "initial_rent" not in existing_cols:
                 self.conn.execute("ALTER TABLE leases ADD COLUMN initial_rent REAL")
+            if "id_front_path" not in existing_cols:
+                self.conn.execute("ALTER TABLE leases ADD COLUMN id_front_path TEXT")
+            if "id_back_path" not in existing_cols:
+                self.conn.execute("ALTER TABLE leases ADD COLUMN id_back_path TEXT")
 
             cursor_pay = self.conn.execute("PRAGMA table_info(payments)")
             pay_cols = [r["name"] for r in cursor_pay.fetchall()]
@@ -167,7 +173,9 @@ class DatabaseManager:
         monthly_rent: float,
         start_date: str,
         deposit_amount: float = 0.0,
-        initial_rent: Optional[float] = None
+        initial_rent: Optional[float] = None,
+        id_front_path: Optional[str] = None,
+        id_back_path: Optional[str] = None
     ) -> Lease:
         room = self.get_room(room_id)
         if not room:
@@ -183,8 +191,11 @@ class DatabaseManager:
         with self.conn:
             cursor = self.conn.execute(
                 """
-                INSERT INTO leases (room_id, tenant_name, tenant_phone, monthly_rent, start_date, end_date, is_active, deposit_amount, initial_rent)
-                VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?)
+                INSERT INTO leases (
+                    room_id, tenant_name, tenant_phone, monthly_rent, start_date,
+                    end_date, is_active, deposit_amount, initial_rent, id_front_path, id_back_path
+                )
+                VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?)
                 """,
                 (
                     room_id,
@@ -193,7 +204,9 @@ class DatabaseManager:
                     float(monthly_rent),
                     start_date,
                     float(deposit_amount),
-                    float(initial_rent) if initial_rent is not None else None
+                    float(initial_rent) if initial_rent is not None else None,
+                    id_front_path,
+                    id_back_path
                 )
             )
             lease_id = cursor.lastrowid
@@ -209,7 +222,9 @@ class DatabaseManager:
             end_date=None,
             is_active=True,
             deposit_amount=float(deposit_amount),
-            initial_rent=float(initial_rent) if initial_rent is not None else None
+            initial_rent=float(initial_rent) if initial_rent is not None else None,
+            id_front_path=id_front_path,
+            id_back_path=id_back_path
         )
 
     def end_lease(self, lease_id: int, end_date: str) -> Lease:
@@ -234,7 +249,9 @@ class DatabaseManager:
             end_date=end_date,
             is_active=False,
             deposit_amount=lease.deposit_amount,
-            initial_rent=lease.initial_rent
+            initial_rent=lease.initial_rent,
+            id_front_path=lease.id_front_path,
+            id_back_path=lease.id_back_path
         )
 
     def update_lease(
@@ -245,7 +262,9 @@ class DatabaseManager:
         monthly_rent: Optional[float] = None,
         deposit_amount: Optional[float] = None,
         start_date: Optional[str] = None,
-        initial_rent: Optional[float] = None
+        initial_rent: Optional[float] = None,
+        id_front_path: Optional[str] = None,
+        id_back_path: Optional[str] = None
     ) -> Lease:
         lease = self.get_lease(lease_id)
         if not lease:
@@ -257,15 +276,18 @@ class DatabaseManager:
         new_deposit = float(deposit_amount) if deposit_amount is not None else lease.deposit_amount
         new_start = start_date.strip() if start_date is not None else lease.start_date
         new_initial = float(initial_rent) if initial_rent is not None else lease.initial_rent
+        new_front = id_front_path if id_front_path is not None else lease.id_front_path
+        new_back = id_back_path if id_back_path is not None else lease.id_back_path
 
         with self.conn:
             self.conn.execute(
                 """
                 UPDATE leases
-                SET tenant_name = ?, tenant_phone = ?, monthly_rent = ?, deposit_amount = ?, start_date = ?, initial_rent = ?
+                SET tenant_name = ?, tenant_phone = ?, monthly_rent = ?, deposit_amount = ?,
+                    start_date = ?, initial_rent = ?, id_front_path = ?, id_back_path = ?
                 WHERE id = ?
                 """,
-                (new_name, new_phone, new_rent, new_deposit, new_start, new_initial, lease_id)
+                (new_name, new_phone, new_rent, new_deposit, new_start, new_initial, new_front, new_back, lease_id)
             )
 
         updated = self.get_lease(lease_id)
@@ -285,7 +307,9 @@ class DatabaseManager:
             end_date=row["end_date"],
             is_active=bool(row["is_active"]),
             deposit_amount=row["deposit_amount"] if "deposit_amount" in row_keys and row["deposit_amount"] is not None else 0.0,
-            initial_rent=row["initial_rent"] if "initial_rent" in row_keys else None
+            initial_rent=row["initial_rent"] if "initial_rent" in row_keys else None,
+            id_front_path=row["id_front_path"] if "id_front_path" in row_keys else None,
+            id_back_path=row["id_back_path"] if "id_back_path" in row_keys else None
         )
 
     def get_lease(self, lease_id: int) -> Optional[Lease]:
@@ -445,6 +469,8 @@ class DatabaseManager:
         lease = self.get_lease(lease_id)
         if not lease:
             raise ValueError(f"Contrato con ID {lease_id} no encontrado.")
+        if not lease.is_active:
+            raise ValueError(f"El contrato con ID {lease_id} ya fue finalizado.")
 
         dep_total = max(0.0, float(deposit_total))
         tot_deductions = round(sum(max(0.0, float(d.amount)) for d in deductions), 2)

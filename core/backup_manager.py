@@ -194,8 +194,11 @@ def import_database_from_json(
         for l in data["leases"]:
             db.conn.execute(
                 """
-                INSERT INTO leases (id, room_id, tenant_name, tenant_phone, monthly_rent, start_date, end_date, is_active, deposit_amount, initial_rent)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO leases (
+                    id, room_id, tenant_name, tenant_phone, monthly_rent, start_date,
+                    end_date, is_active, deposit_amount, initial_rent, id_front_path, id_back_path
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     l.get("id"),
@@ -207,7 +210,9 @@ def import_database_from_json(
                     l.get("end_date"),
                     1 if l.get("is_active", True) else 0,
                     float(l.get("deposit_amount", 0.0)),
-                    float(l["initial_rent"]) if l.get("initial_rent") is not None else None
+                    float(l["initial_rent"]) if l.get("initial_rent") is not None else None,
+                    l.get("id_front_path"),
+                    l.get("id_back_path")
                 )
             )
 
@@ -281,6 +286,7 @@ def merge_database_from_json(
     rooms_count = 0
     leases_count = 0
     payments_count = 0
+    settlements_count = 0
 
     with db.conn:
         # 1. Procesar Cuartos
@@ -338,7 +344,9 @@ def merge_database_from_json(
                 db.conn.execute(
                     """
                     UPDATE leases
-                    SET tenant_phone = ?, monthly_rent = ?, deposit_amount = ?, is_active = ?, end_date = ?
+                    SET tenant_phone = ?, monthly_rent = ?, deposit_amount = ?, is_active = ?, end_date = ?,
+                        id_front_path = COALESCE(?, id_front_path),
+                        id_back_path = COALESCE(?, id_back_path)
                     WHERE id = ?
                     """,
                     (
@@ -347,14 +355,19 @@ def merge_database_from_json(
                         float(l.get("deposit_amount", dest_lease.deposit_amount)),
                         1 if l.get("is_active", True) else 0,
                         l.get("end_date"),
+                        l.get("id_front_path"),
+                        l.get("id_back_path"),
                         dest_lease.id
                     )
                 )
             else:
                 cursor = db.conn.execute(
                     """
-                    INSERT INTO leases (room_id, tenant_name, tenant_phone, monthly_rent, start_date, end_date, is_active, deposit_amount, initial_rent)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO leases (
+                        room_id, tenant_name, tenant_phone, monthly_rent, start_date,
+                        end_date, is_active, deposit_amount, initial_rent, id_front_path, id_back_path
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         dest_room_id,
@@ -365,7 +378,9 @@ def merge_database_from_json(
                         l.get("end_date"),
                         1 if l.get("is_active", True) else 0,
                         float(l.get("deposit_amount", 0.0)),
-                        float(l["initial_rent"]) if l.get("initial_rent") is not None else None
+                        float(l["initial_rent"]) if l.get("initial_rent") is not None else None,
+                        l.get("id_front_path"),
+                        l.get("id_back_path")
                     )
                 )
                 new_lease_id = cursor.lastrowid
@@ -404,7 +419,50 @@ def merge_database_from_json(
             )
             payments_count += 1
 
-        # 4. Sincronizar ocupación de cuartos con los contratos activos resultantes
+        # 4. Procesar Finiquitos de Depósito (evitando duplicados)
+        existing_settlements = {
+            (s.lease_id, s.settlement_date, round(float(s.total_deductions), 2), round(float(s.refund_amount), 2))
+            for s in db.get_all_settlements()
+        }
+        for s in data.get("settlements", []):
+            old_lease_id = int(s["lease_id"])
+            dest_lease_id = lease_id_map.get(old_lease_id)
+            if dest_lease_id is None:
+                continue
+
+            s_key = (
+                dest_lease_id,
+                str(s["settlement_date"]),
+                round(float(s["total_deductions"]), 2),
+                round(float(s["refund_amount"]), 2)
+            )
+            if s_key in existing_settlements:
+                continue
+
+            raw_ded = s.get("deductions", [])
+            ded_json = json.dumps([d.to_dict() if hasattr(d, "to_dict") else d for d in raw_ded], ensure_ascii=False)
+            db.conn.execute(
+                """
+                INSERT INTO lease_settlements (
+                    lease_id, settlement_date, deposit_total,
+                    deductions_json, total_deductions, refund_amount, notes
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    dest_lease_id,
+                    s["settlement_date"],
+                    float(s["deposit_total"]),
+                    ded_json,
+                    float(s["total_deductions"]),
+                    float(s["refund_amount"]),
+                    s.get("notes")
+                )
+            )
+            existing_settlements.add(s_key)
+            settlements_count += 1
+
+        # 5. Sincronizar ocupación de cuartos con los contratos activos resultantes
         active_room_ids = {l.room_id for l in db.get_all_leases(active_only=True)}
         for room in db.get_all_rooms():
             is_occ = 1 if room.id in active_room_ids else 0
@@ -415,7 +473,8 @@ def merge_database_from_json(
         "success": True,
         "rooms_merged": rooms_count,
         "leases_merged": leases_count,
-        "payments_merged": payments_count
+        "payments_merged": payments_count,
+        "settlements_merged": settlements_count
     }
 
 
