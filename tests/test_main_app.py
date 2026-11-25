@@ -111,4 +111,13 @@ def test_app_tenant_id_and_image_viewer_dialogs(test_app, tmp_path):
 
     # Room menu opens cleanly without throwing or overflowing horizontal buttons
     test_app.on_room_menu(room, updated_lease)
-    assert True
+
+    # House rules editor opens cleanly with or without a lease
+    from ui.dialogs import show_house_rules_editor_dialog
+    rules_dialog_global = show_house_rules_editor_dialog(test_app.db)
+    assert "Reglamento" in rules_dialog_global.title
+    rules_dialog_global.dismiss()
+
+    rules_dialog_lease = show_house_rules_editor_dialog(test_app.db, lease=updated_lease)
+    assert "Reglamento" in rules_dialog_lease.title
+    rules_dialog_lease.dismiss()

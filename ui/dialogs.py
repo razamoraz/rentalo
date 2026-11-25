@@ -22,6 +22,12 @@ from core.database import DatabaseManager
 from core.settlement_engine import (
     calculate_settlement,
     build_settlement_whatsapp_message,
+    build_house_rules_whatsapp_message,
+    get_house_rules_template,
+    save_house_rules_template,
+    get_house_name,
+    save_house_name,
+    DEFAULT_HOUSE_RULES_TEMPLATE,
     DEFAULT_DEDUCTION_CONCEPTS,
     STATUS_REFUND_TO_TENANT,
     STATUS_EXACT_BALANCE
@@ -1258,3 +1264,235 @@ def _section_label(text: str) -> MDLabel:
         bold=True,
         adaptive_height=True
     )
+
+
+def show_house_rules_editor_dialog(
+    db: DatabaseManager,
+    lease: Optional[Lease] = None,
+    on_saved: Optional[Callable[[], None]] = None
+) -> MDDialog:
+    """
+    Editor de Reglamento Interno personalizable por el dueño.
+    Permite pegar texto directamente desde WhatsApp o escribir en formato
+    WhatsApp / Markdown básico (*negrita*, **negrita**, _cursiva_, ## Título).
+    Los placeholders {tenant_name} y {house_name} se sustituyen al enviar.
+    """
+    content = MDBoxLayout(
+        orientation="vertical",
+        spacing=dp(8),
+        size_hint_y=None,
+        adaptive_height=True,
+        padding=[0, 0, 0, dp(4)]
+    )
+
+    dialog = None
+
+    # --- Nombre de la propiedad ---
+    house_name = get_house_name(db)
+    name_field = MDTextField(
+        text=house_name,
+        hint_text="Nombre de la propiedad",
+        helper_text="Se inserta donde aparece {house_name}",
+        helper_text_mode="on_focus",
+        size_hint=(1, None),
+        height=dp(48),
+        max_text_length=60
+    )
+    content.add_widget(MDLabel(
+        text="NOMBRE DE LA PROPIEDAD",
+        font_style="Overline",
+        theme_text_color="Primary",
+        bold=True,
+        adaptive_height=True
+    ))
+    content.add_widget(name_field)
+
+    # --- Editor de texto del reglamento ---
+    content.add_widget(MDLabel(
+        text="REGLAMENTO (WHATSAPP / MARKDOWN)",
+        font_style="Overline",
+        theme_text_color="Primary",
+        bold=True,
+        adaptive_height=True
+    ))
+
+    # Hint de formato
+    content.add_widget(MDLabel(
+        text="*negrita*  _cursiva_  ~tachado~  (o **Markdown** / ## Título)\n"
+             "Variables: {tenant_name} y {house_name}",
+        font_style="Caption",
+        theme_text_color="Hint",
+        adaptive_height=True
+    ))
+
+    current_template = get_house_rules_template(db)
+    rules_field = MDTextField(
+        text=current_template,
+        hint_text="Escriba o pegue aquí el reglamento...",
+        multiline=True,
+        size_hint=(1, None),
+        height=dp(190),
+        mode="rectangle"
+    )
+
+    # --- Barra rápida para pegar de WhatsApp o insertar variables ---
+    tools_row = MDBoxLayout(
+        orientation="horizontal",
+        spacing=dp(6),
+        size_hint_y=None,
+        height=dp(36)
+    )
+
+    def paste_from_whatsapp():
+        try:
+            from kivy.core.clipboard import Clipboard
+            pasted = Clipboard.paste()
+        except Exception:
+            pasted = ""
+        if pasted and pasted.strip():
+            rules_field.text = pasted.strip()
+            show_snackbar("Texto pegado del portapapeles. Revise y guarde.")
+        else:
+            show_snackbar("El portapapeles está vacío. Copie un mensaje en WhatsApp primero.")
+
+    def insert_variable(token: str):
+        try:
+            rules_field.insert_text(token)
+        except Exception:
+            rules_field.text = (rules_field.text or "") + token
+
+    tools_row.add_widget(MDRectangleFlatIconButton(
+        text="PEGAR",
+        icon="content-paste",
+        size_hint=(0.38, None),
+        height=dp(34),
+        on_release=lambda x: paste_from_whatsapp()
+    ))
+    tools_row.add_widget(MDFlatButton(
+        text="+ Inquilino",
+        size_hint=(0.31, None),
+        height=dp(34),
+        on_release=lambda x: insert_variable("{tenant_name}")
+    ))
+    tools_row.add_widget(MDFlatButton(
+        text="+ Propiedad",
+        size_hint=(0.31, None),
+        height=dp(34),
+        on_release=lambda x: insert_variable("{house_name}")
+    ))
+
+    content.add_widget(tools_row)
+    content.add_widget(rules_field)
+
+    # --- Botones de acción ---
+    buttons_row = MDBoxLayout(
+        orientation="horizontal",
+        spacing=dp(8),
+        size_hint_y=None,
+        height=dp(44)
+    )
+
+    def _persist():
+        save_house_name(db, name_field.text)
+        save_house_rules_template(db, rules_field.text)
+
+    def save_rules():
+        _persist()
+        show_snackbar("Reglamento guardado correctamente.")
+        if on_saved:
+            on_saved()
+
+    def reset_to_default():
+        rules_field.text = DEFAULT_HOUSE_RULES_TEMPLATE
+        show_snackbar("Plantilla restaurada a los valores por defecto.")
+
+    def show_preview_dialog(rendered_msg: str):
+        pv_dialog = None
+        pv_scroll = MDScrollView(size_hint_y=None, height=dp(260))
+        pv_label = MDLabel(
+            text=rendered_msg,
+            adaptive_height=True,
+            size_hint_y=None,
+            padding=[dp(4), dp(4)]
+        )
+        pv_scroll.add_widget(pv_label)
+        pv_dialog = MDDialog(
+            title="Vista previa (WhatsApp)",
+            type="custom",
+            content_cls=pv_scroll,
+            buttons=[
+                MDFlatButton(
+                    text="CERRAR",
+                    on_release=lambda x: pv_dialog.dismiss()
+                )
+            ]
+        )
+        pv_dialog.open()
+
+    def preview_or_send():
+        _persist()
+        if on_saved:
+            on_saved()
+        tenant_name = lease.tenant_name if lease else "Inquilino Ejemplo"
+        phone = lease.tenant_phone if lease else None
+        msg = build_house_rules_whatsapp_message(
+            tenant_name=tenant_name,
+            db=db
+        )
+        if phone:
+            success = open_whatsapp(phone, msg)
+            if success:
+                show_snackbar(f"Enviando reglamento a {tenant_name}...")
+            else:
+                show_snackbar("No se pudo abrir WhatsApp.")
+            if dialog:
+                dialog.dismiss()
+        else:
+            show_preview_dialog(msg)
+
+    btn_save = MDFillRoundFlatIconButton(
+        text="GUARDAR",
+        icon="content-save-outline",
+        size_hint=(0.5, None),
+        height=dp(44),
+        md_bg_color=COLOR_PAGADO,
+        text_color=(1, 1, 1, 1),
+        icon_color=(1, 1, 1, 1),
+        on_release=lambda x: save_rules()
+    )
+
+    btn_send = MDFillRoundFlatIconButton(
+        text="ENVIAR" if lease else "VISTA PREVIA",
+        icon="whatsapp" if lease else "eye-outline",
+        size_hint=(0.5, None),
+        height=dp(44),
+        md_bg_color=(0.07, 0.62, 0.38, 1.0),
+        text_color=(1, 1, 1, 1),
+        icon_color=(1, 1, 1, 1),
+        on_release=lambda x: preview_or_send()
+    )
+
+    buttons_row.add_widget(btn_save)
+    buttons_row.add_widget(btn_send)
+    content.add_widget(buttons_row)
+
+    scroll = MDScrollView(size_hint_y=None, height=dp(420))
+    scroll.add_widget(content)
+
+    dialog = MDDialog(
+        title="Reglamento Interno",
+        type="custom",
+        content_cls=scroll,
+        buttons=[
+            MDFlatButton(
+                text="RESTAURAR DEFAULT",
+                on_release=lambda x: reset_to_default()
+            ),
+            MDFlatButton(
+                text="CERRAR",
+                on_release=lambda x: dialog.dismiss()
+            )
+        ]
+    )
+    dialog.open()
+    return dialog

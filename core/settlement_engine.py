@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from typing import List, Dict, Any, Optional
 from core.models import DepositDeduction, LeaseSettlement
@@ -111,30 +112,81 @@ def get_settlement_whatsapp_link(
     return generate_whatsapp_link(tenant_phone, message)
 
 
+DEFAULT_HOUSE_RULES_TEMPLATE = (
+    "📜 *{house_name} - Reglamento Interno y Normas de Convivencia*\n"
+    "\n"
+    "Hola *{tenant_name}*, le damos la más cordial bienvenida a *{house_name}*.\n"
+    "Para garantizar la tranquilidad, seguridad y comodidad de todos, le compartimos nuestras normas básicas de convivencia:\n"
+    "\n"
+    "1. ⏰ *Puntualidad en Rentas:* El pago se realiza dentro de los primeros 5 días naturales de cada mes.\n"
+    "2. 🔇 *Horario de Silencio:* De 10:00 PM a 07:00 AM se solicita mantener el volumen moderado (música, TV, llamadas).\n"
+    "3. 🧹 *Áreas Comunes:* Mantener limpias y ordenadas las áreas compartidas (baño, cocina, pasillos) después de usarlas.\n"
+    "4. 🔑 *Seguridad y Llaves:* Mantener la puerta principal con llave al entrar y salir. Prohibido duplicar llaves sin autorización.\n"
+    "5. 👥 *Visitas:* Las visitas deben respetar el reglamento y no permanecer en horarios nocturnos de descanso sin aviso previo.\n"
+    "6. 🚭 *Cuidado de las Instalaciones:* Prohibido fumar dentro de las habitaciones y cuidar el mobiliario e instalaciones de la casa.\n"
+    "\n"
+    "¡Agradecemos mucho su colaboración para mantener un ambiente agradable y respetuoso para todos!"
+)
+
+HOUSE_RULES_SETTING_KEY = "house_rules"
+HOUSE_NAME_SETTING_KEY = "house_name"
+
+
+def get_house_rules_template(db) -> str:
+    """Obtiene el reglamento personalizado o el template por defecto."""
+    custom = db.get_setting(HOUSE_RULES_SETTING_KEY)
+    return custom if custom else DEFAULT_HOUSE_RULES_TEMPLATE
+
+
+def save_house_rules_template(db, text: str) -> None:
+    """Guarda el reglamento personalizado en la configuración."""
+    db.set_setting(HOUSE_RULES_SETTING_KEY, text.strip())
+
+
+def get_house_name(db) -> str:
+    """Obtiene el nombre de la casa/propiedad."""
+    return db.get_setting(HOUSE_NAME_SETTING_KEY) or "renTalo"
+
+
+def save_house_name(db, name: str) -> None:
+    """Guarda el nombre de la casa/propiedad."""
+    db.set_setting(HOUSE_NAME_SETTING_KEY, name.strip())
+
+
+def markdown_to_whatsapp(text: str) -> str:
+    """
+    Convierte sintaxis básica de Markdown (**negrita**, ## Título, - lista)
+    a formato compatible con WhatsApp (*negrita*, • lista), preservando
+    el formato nativo de WhatsApp (*negrita*, _cursiva_, ~tachado~).
+    """
+    # Encabezados Markdown (# Título -> *Título*)
+    converted = re.sub(r"(?m)^#{1,6}\s+(.+?)\s*$", r"*\1*", text)
+    # Negritas Markdown (**texto** -> *texto*) sin tocar *texto* de WhatsApp
+    converted = re.sub(r"\*\*(.+?)\*\*", r"*\1*", converted)
+    # Viñetas Markdown (- item -> • item)
+    converted = re.sub(r"(?m)^-\s+", "• ", converted)
+    return converted
+
+
 def build_house_rules_whatsapp_message(
     tenant_name: Optional[str] = None,
-    house_name: str = "renTalo"
+    house_name: str = "renTalo",
+    db=None
 ) -> str:
     """
-    Genera el mensaje cordial con el Reglamento Interno y Normas de Convivencia para nuevos inquilinos.
+    Genera el mensaje con el Reglamento Interno para enviar por WhatsApp.
+    Si se pasa db, usa el reglamento personalizado guardado por el dueño.
+    Los placeholders {tenant_name} y {house_name} se sustituyen de forma segura al enviar.
     """
-    saludo = f"Hola *{tenant_name}*," if tenant_name else "Hola,"
-    lines = [
-        "📜 *renTalo - Reglamento Interno y Normas de Convivencia*",
-        "",
-        f"{saludo} le damos la más cordial bienvenida a *{house_name}*.",
-        "Para garantizar la tranquilidad, seguridad y comodidad de todos, le compartimos nuestras normas básicas de convivencia:",
-        "",
-        "1. ⏰ *Puntualidad en Rentas:* El pago se realiza dentro de los primeros 5 días naturales de cada mes.",
-        "2. 🔇 *Horario de Silencio:* De 10:00 PM a 07:00 AM se solicita mantener el volumen moderado (música, TV, llamadas).",
-        "3. 🧹 *Áreas Comunes:* Mantener limpias y ordenadas las áreas compartidas (baño, cocina, pasillos) después de usarlas.",
-        "4. 🔑 *Seguridad y Llaves:* Mantener la puerta principal con llave al entrar y salir. Prohibido duplicar llaves sin autorización.",
-        "5. 👥 *Visitas:* Las visitas deben respetar el reglamento y no permanecer en horarios nocturnos de descanso sin aviso previo.",
-        "6. 🚭 *Cuidado de las Instalaciones:* Prohibido fumar dentro de las habitaciones y cuidar el mobiliario e instalaciones de la casa.",
-        "",
-        "¡Agradecemos mucho su colaboración para mantener un ambiente agradable y respetuoso para todos!"
-    ]
-    return "\n".join(lines)
+    if db is not None:
+        template = get_house_rules_template(db)
+        house_name = get_house_name(db)
+    else:
+        template = DEFAULT_HOUSE_RULES_TEMPLATE
+
+    safe_tenant = tenant_name or "Inquilino"
+    rendered = template.replace("{tenant_name}", safe_tenant).replace("{house_name}", house_name)
+    return markdown_to_whatsapp(rendered)
 
 
 def get_house_rules_whatsapp_link(

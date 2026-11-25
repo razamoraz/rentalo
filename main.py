@@ -37,7 +37,7 @@ from core.backup_manager import (
     is_backup_overdue,
     record_backup_completed
 )
-from core.settlement_engine import build_house_rules_whatsapp_message
+from core.settlement_engine import build_house_rules_whatsapp_message, get_house_name
 from ui.theme_config import (
     COLOR_PAGADO,
     COLOR_PENDIENTE,
@@ -56,6 +56,7 @@ from ui.dialogs import (
     show_edit_lease_dialog,
     show_end_lease_dialog,
     show_backup_manager_dialog,
+    show_house_rules_editor_dialog,
     show_snackbar
 )
 from core.notifications import (
@@ -93,10 +94,11 @@ class RenTaloApp(MDApp):
         month_name = get_spanish_month_name(self.reference_date.month).capitalize()
         year = self.reference_date.year
         self.top_bar = MDTopAppBar(
-            title=f"renTalo - {month_name} {year}",
+            title=f"renTalo · {month_name[:3]} {year}",
             anchor_title="left",
             elevation=2,
             right_action_items=[
+                ["file-document-edit-outline", lambda x: self.open_house_rules_dialog(), "Editar Reglamento"],
                 ["cloud-upload-outline", lambda x: self.open_backup_dialog(), "Respaldos y Excel"],
                 ["plus-circle-outline", lambda x: self.open_new_room_dialog(), "Nuevo Cuarto"]
             ]
@@ -279,8 +281,8 @@ class RenTaloApp(MDApp):
         )
 
     def on_send_house_rules(self, lease: Lease) -> None:
-        """Abre WhatsApp con el reglamento interno de la casa para el inquilino."""
-        msg = build_house_rules_whatsapp_message(tenant_name=lease.tenant_name, house_name="renTalo")
+        """Abre WhatsApp con el reglamento interno personalizado de la casa para el inquilino."""
+        msg = build_house_rules_whatsapp_message(tenant_name=lease.tenant_name, db=self.db)
         success = open_whatsapp(lease.tenant_phone, msg)
         if success:
             show_snackbar(f"Abriendo WhatsApp con reglamento para {lease.tenant_name}...")
@@ -323,12 +325,17 @@ class RenTaloApp(MDApp):
             )
 
         _add_option(
+            "Editar reglamento interno",
+            "file-document-edit-outline",
+            lambda: self.open_house_rules_dialog(lease=lease)
+        )
+        _add_option(
             "Eliminar cuarto",
             "delete-outline",
             lambda: self._confirm_delete_room(None, room)
         )
 
-        scroll_height = dp(245) if lease else dp(65)
+        scroll_height = dp(290) if lease else dp(115)
         scroll = MDScrollView(size_hint_y=None, height=scroll_height, do_scroll_x=False)
         scroll.add_widget(menu_list)
 
@@ -380,6 +387,14 @@ class RenTaloApp(MDApp):
             db=self.db,
             reference_date=self.reference_date,
             on_backup_completed=self.refresh_ui
+        )
+
+    def open_house_rules_dialog(self, lease: Optional[Lease] = None) -> None:
+        """Abre el editor personalizable del reglamento interno."""
+        show_house_rules_editor_dialog(
+            db=self.db,
+            lease=lease,
+            on_saved=self.refresh_ui
         )
 
 

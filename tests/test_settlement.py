@@ -9,6 +9,12 @@ from core.settlement_engine import (
     get_settlement_whatsapp_link,
     build_house_rules_whatsapp_message,
     get_house_rules_whatsapp_link,
+    get_house_rules_template,
+    save_house_rules_template,
+    get_house_name,
+    save_house_name,
+    markdown_to_whatsapp,
+    DEFAULT_HOUSE_RULES_TEMPLATE,
     STATUS_REFUND_TO_TENANT,
     STATUS_EXACT_BALANCE,
     STATUS_BALANCE_DUE_BY_TENANT,
@@ -280,3 +286,34 @@ def test_merge_database_from_json_preserves_settlements_without_duplicates(tmp_p
     stats2 = merge_database_from_json(db_sup2, sup1_json)
     assert stats2["settlements_merged"] == 0
     assert len(db_sup2.get_all_settlements()) == 1
+
+
+def test_custom_house_rules_persistence_and_markdown_conversion():
+    db = DatabaseManager(":memory:")
+    # Default values before customization
+    assert get_house_name(db) == "renTalo"
+    assert get_house_rules_template(db) == DEFAULT_HOUSE_RULES_TEMPLATE
+
+    # Save custom property name and Markdown/WhatsApp hybrid rules with literal braces
+    save_house_name(db, "Casa Girasoles")
+    custom_rules = (
+        "## Reglamento de {house_name}\n"
+        "Hola **{tenant_name}** ({zona}):\n"
+        "- No fumar\n"
+        "- _Silencio_ después de las 10 PM"
+    )
+    save_house_rules_template(db, custom_rules)
+
+    assert get_house_name(db) == "Casa Girasoles"
+    msg = build_house_rules_whatsapp_message(tenant_name="Sofía", db=db)
+
+    assert "*Reglamento de Casa Girasoles*" in msg
+    assert "Hola *Sofía* ({zona}):" in msg
+    assert "• No fumar" in msg
+    assert "• _Silencio_ después de las 10 PM" in msg
+    assert "## " not in msg
+    assert "**" not in msg
+
+    # Preserves native WhatsApp formatting untouched
+    native_wa = "*Título* y _cursiva_ y ~tachado~"
+    assert markdown_to_whatsapp(native_wa) == native_wa
