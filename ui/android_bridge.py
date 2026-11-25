@@ -100,6 +100,34 @@ def pick_image_file(on_selected: Callable[[Optional[str]], None]) -> bool:
     Abre el selector nativo de galería/archivos (Android/iOS/escritorio) para elegir una imagen.
     Invoca on_selected(ruta) o on_selected(None) si se cancela.
     """
+    return _pick_file(
+        on_selected=on_selected,
+        title="Seleccionar imagen",
+        plyer_filters=[["Imágenes", "*.png", "*.jpg", "*.jpeg", "*.webp"]],
+        tk_filetypes=[("Imágenes", "*.png *.jpg *.jpeg *.webp"), ("Todos", "*.*")]
+    )
+
+
+def pick_json_file(on_selected: Callable[[Optional[str]], None]) -> bool:
+    """
+    Abre el selector nativo de archivos para elegir un archivo .json de respaldo.
+    Invoca on_selected(ruta) o on_selected(None) si se cancela.
+    """
+    return _pick_file(
+        on_selected=on_selected,
+        title="Seleccionar archivo de respaldo (.json)",
+        plyer_filters=[["Respaldos JSON", "*.json"]],
+        tk_filetypes=[("Archivos JSON", "*.json"), ("Todos", "*.*")]
+    )
+
+
+def _pick_file(
+    on_selected: Callable[[Optional[str]], None],
+    title: str,
+    plyer_filters: list,
+    tk_filetypes: list
+) -> bool:
+    """Implementación interna del selector de archivos con fallbacks."""
     try:
         from plyer import filechooser  # type: ignore
 
@@ -110,8 +138,8 @@ def pick_image_file(on_selected: Callable[[Optional[str]], None]) -> bool:
                 on_selected(None)
 
         filechooser.open_file(
-            title="Seleccionar imagen",
-            filters=[["Imágenes", "*.png", "*.jpg", "*.jpeg", "*.webp"]],
+            title=title,
+            filters=plyer_filters,
             on_selection=_handle
         )
         return True
@@ -125,8 +153,8 @@ def pick_image_file(on_selected: Callable[[Optional[str]], None]) -> bool:
         root = tk.Tk()
         root.withdraw()
         selected = filedialog.askopenfilename(
-            title="Seleccionar imagen",
-            filetypes=[("Imágenes", "*.png *.jpg *.jpeg *.webp"), ("Todos", "*.*")]
+            title=title,
+            filetypes=tk_filetypes
         )
         root.destroy()
         on_selected(selected if selected else None)

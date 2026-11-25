@@ -1,8 +1,10 @@
 import csv
 import json
+import re
+import zipfile
 from datetime import date, datetime
 from pathlib import Path
-from typing import Optional, Union, Dict, Any
+from typing import Optional, Union, Dict, Any, List
 
 from core.database import DatabaseManager
 from core.models import Room, Lease, Payment
@@ -476,6 +478,99 @@ def merge_database_from_json(
         "payments_merged": payments_count,
         "settlements_merged": settlements_count
     }
+
+
+def _sanitize_filename(name: str) -> str:
+    """Limpia un nombre para usarlo como componente seguro de ruta en el ZIP."""
+    name = re.sub(r'[\\/:*?"<>|]', '_', name.strip())
+    return name[:60] if name else "sin_nombre"
+
+
+def export_full_backup_zip(
+    db: DatabaseManager,
+    target_path: Union[str, Path],
+    reference_date: Optional[date] = None
+) -> Path:
+    """
+    Genera un archivo .zip con:
+    - respaldo.json (base de datos completa)
+    - imagenes/<Cuarto>_<Inquilino>/INE_frente.jpg
+    - imagenes/<Cuarto>_<Inquilino>/INE_reverso.jpg
+    - imagenes/<Cuarto>_<Inquilino>/comprobante_AAAA_Mes.jpg
+
+    Usa zipfile en modo streaming: nunca carga todo en RAM.
+    Las imágenes que no existen en disco se saltan silenciosamente.
+    """
+    if reference_date is None:
+        reference_date = date.today()
+
+    path = Path(target_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # --- Datos JSON ---
+    rooms = db.get_all_rooms()
+    leases = db.get_all_leases(active_only=False)
+    payments = db.get_all_payments()
+    settlements = db.get_all_settlements()
+    settings = db.get_all_settings() if hasattr(db, "get_all_settings") else {}
+
+    json_data = {
+        "export_date": reference_date.isoformat(),
+        "rooms": [r.to_dict() for r in rooms],
+        "leases": [l.to_dict() for l in leases],
+        "payments": [p.to_dict() for p in payments],
+        "settlements": [s.to_dict() for s in settlements],
+        "settings": settings
+    }
+
+    rooms_map = {r.id: r for r in rooms if r.id is not None}
+    leases_map = {l.id: l for l in leases if l.id is not None}
+
+    images_added = 0
+
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        # 1. Base de datos JSON
+        zf.writestr("respaldo.json", json.dumps(json_data, ensure_ascii=False, indent=2))
+
+        # 2. Fotos de INE por contrato
+        for lease in leases:
+            room = rooms_map.get(lease.room_id)
+            room_name = _sanitize_filename(room.name) if room else f"cuarto_{lease.room_id}"
+            tenant_name = _sanitize_filename(lease.tenant_name)
+            folder = f"imagenes/{room_name}_{tenant_name}"
+
+            for attr, label in [("id_front_path", "INE_frente"), ("id_back_path", "INE_reverso")]:
+                img_path_str = getattr(lease, attr, None)
+                if img_path_str:
+                    img_path = Path(img_path_str)
+                    if img_path.exists():
+                        ext = img_path.suffix or ".jpg"
+                        zf.write(img_path, f"{folder}/{label}{ext}")
+                        images_added += 1
+
+        # 3. Comprobantes de pago
+        for payment in payments:
+            if not payment.proof_image_path:
+                continue
+            img_path = Path(payment.proof_image_path)
+            if not img_path.exists():
+                continue
+
+            lease = leases_map.get(payment.lease_id)
+            if lease:
+                room = rooms_map.get(lease.room_id)
+                room_name = _sanitize_filename(room.name) if room else f"cuarto_{lease.room_id}"
+                tenant_name = _sanitize_filename(lease.tenant_name)
+                folder = f"imagenes/{room_name}_{tenant_name}"
+            else:
+                folder = f"imagenes/contrato_{payment.lease_id}"
+
+            month_name = get_spanish_month_name(payment.billing_month).capitalize()
+            ext = img_path.suffix or ".jpg"
+            zf.write(img_path, f"{folder}/comprobante_{payment.billing_year}_{month_name}{ext}")
+            images_added += 1
+
+    return path
 
 
 def get_last_backup_date(db: DatabaseManager) -> Optional[str]:

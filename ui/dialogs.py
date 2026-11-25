@@ -35,6 +35,7 @@ from core.backup_manager import (
     export_payments_csv,
     export_rooms_status_csv,
     export_database_to_json,
+    export_full_backup_zip,
     merge_database_from_json,
     record_backup_completed,
     get_last_backup_date
@@ -46,6 +47,7 @@ from ui.android_bridge import (
     save_payment_proof,
     save_tenant_id_photo,
     pick_image_file,
+    pick_json_file,
     capture_camera_photo,
     view_image_file
 )
@@ -1074,17 +1076,19 @@ def show_backup_manager_dialog(
     reference_date: date,
     on_backup_completed: Callable[[], None]
 ) -> MDDialog:
-    """Diálogo compacto de respaldos, exportación Excel CSV e integración multi-supervisor."""
-    content = MDBoxLayout(
+    """Diálogo compacto de respaldos con ZIP+imágenes, CSV para contadores, y merge por selector de archivos."""
+
+    inner = MDBoxLayout(
         orientation="vertical",
-        spacing=dp(10),
+        spacing=dp(8),
         size_hint_y=None,
-        height=dp(248)
+        adaptive_height=True,
+        padding=[0, 0, 0, dp(4)]
     )
 
-    last_date = get_last_backup_date(db) or "Nunca realizado"
-    content.add_widget(MDLabel(
-        text=f"Último respaldo registrado: {last_date}",
+    last_date = get_last_backup_date(db) or "Nunca"
+    inner.add_widget(MDLabel(
+        text=f"Último respaldo: {last_date}",
         font_style="Caption",
         theme_text_color="Secondary",
         bold=True,
@@ -1093,14 +1097,95 @@ def show_backup_manager_dialog(
 
     dialog = None
 
+    # --- Sección 1: Respaldo completo (ZIP con imágenes) ---
+    inner.add_widget(_section_label("RESPALDO COMPLETO"))
+
+    def create_zip_backup():
+        try:
+            folder = get_export_directory()
+            ts = reference_date.strftime('%Y%m%d_%H%M%S')
+            filepath = folder / f"respaldo_rentalo_{ts}.zip"
+            export_full_backup_zip(db, filepath, reference_date)
+            record_backup_completed(db, reference_date)
+            share_file(str(filepath), mime_type="application/zip",
+                       title="Enviar respaldo por WhatsApp")
+            show_snackbar("Respaldo ZIP con imágenes generado.")
+            if dialog:
+                dialog.dismiss()
+            on_backup_completed()
+        except Exception as e:
+            show_snackbar(f"Error al respaldar: {e}")
+
+    btn_zip = MDFillRoundFlatIconButton(
+        text="RESPALDAR TODO (ZIP)",
+        icon="zip-box-outline",
+        size_hint=(1, None),
+        height=dp(44),
+        md_bg_color=COLOR_PAGADO,
+        text_color=(1, 1, 1, 1),
+        icon_color=(1, 1, 1, 1),
+        on_release=lambda x: create_zip_backup()
+    )
+    inner.add_widget(btn_zip)
+    inner.add_widget(MDLabel(
+        text="Incluye datos + fotos INE y comprobantes.\nEnvíelo por WhatsApp al otro supervisor.",
+        font_style="Caption",
+        theme_text_color="Hint",
+        adaptive_height=True
+    ))
+
+    # --- Sección 2: Combinar datos recibidos ---
+    inner.add_widget(_section_label("COMBINAR DATOS"))
+
+    def merge_from_file():
+        def _on_file_selected(path: str | None):
+            if not path:
+                show_snackbar("No se seleccionó ningún archivo.")
+                return
+            try:
+                stats = merge_database_from_json(db, path)
+                show_snackbar(
+                    f"Datos combinados:\n"
+                    f"+{stats['rooms_merged']} cuartos, +{stats['leases_merged']} contratos, "
+                    f"+{stats['payments_merged']} pagos, +{stats.get('settlements_merged', 0)} finiquitos."
+                )
+                if dialog:
+                    dialog.dismiss()
+                on_backup_completed()
+            except Exception as e:
+                show_snackbar(f"Error al combinar: {e}")
+        pick_json_file(_on_file_selected)
+
+    btn_merge = MDFillRoundFlatIconButton(
+        text="IMPORTAR ARCHIVO .JSON",
+        icon="file-import-outline",
+        size_hint=(1, None),
+        height=dp(44),
+        md_bg_color=(0.12, 0.53, 0.53, 1.0),
+        text_color=(1, 1, 1, 1),
+        icon_color=(1, 1, 1, 1),
+        on_release=lambda x: merge_from_file()
+    )
+    inner.add_widget(btn_merge)
+    inner.add_widget(MDLabel(
+        text="Seleccione el .json recibido por WhatsApp\no descargado de otro dispositivo.",
+        font_style="Caption",
+        theme_text_color="Hint",
+        adaptive_height=True
+    ))
+
+    # --- Sección 3: Exportar CSV para Excel / contador ---
+    inner.add_widget(_section_label("EXPORTAR PARA EXCEL"))
+
     def export_payments():
         try:
             folder = get_export_directory()
             filename = f"pagos_rentalo_{reference_date.strftime('%Y%m%d')}.csv"
             filepath = folder / filename
             export_payments_csv(db, filepath)
-            share_file(str(filepath), title="Compartir historial de pagos")
-            show_snackbar(f"Pagos exportados en:\n{filepath.name}")
+            share_file(str(filepath), mime_type="text/csv",
+                       title="Enviar historial de pagos")
+            show_snackbar(f"CSV exportado. Ábralo en Excel o\nenvíelo al contador por WhatsApp.")
         except Exception as e:
             show_snackbar(f"Error al exportar: {e}")
 
@@ -1110,95 +1195,49 @@ def show_backup_manager_dialog(
             filename = f"cuartos_rentalo_{reference_date.strftime('%Y%m%d')}.csv"
             filepath = folder / filename
             export_rooms_status_csv(db, filepath, reference_date=reference_date)
-            share_file(str(filepath), title="Compartir estado de cuartos")
-            show_snackbar(f"Estado de cuartos exportado en:\n{filepath.name}")
+            share_file(str(filepath), mime_type="text/csv",
+                       title="Enviar estado de cuartos")
+            show_snackbar(f"CSV exportado. Ábralo en Excel o\nenvíelo al contador por WhatsApp.")
         except Exception as e:
             show_snackbar(f"Error al exportar: {e}")
 
-    def create_full_backup():
-        try:
-            folder = get_export_directory()
-            filename = f"respaldo_completo_{reference_date.strftime('%Y%m%d_%H%M%S')}.json"
-            filepath = folder / filename
-            export_database_to_json(db, filepath)
-            record_backup_completed(db, reference_date)
-            share_file(str(filepath), title="Compartir archivo de respaldo")
-            show_snackbar("Respaldo completo generado y registrado.")
-            if dialog:
-                dialog.dismiss()
-            on_backup_completed()
-        except Exception as e:
-            show_snackbar(f"Error al respaldar: {e}")
-
-    def merge_from_other_supervisor():
-        try:
-            folder = get_export_directory()
-            json_files = sorted(folder.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-            if not json_files:
-                show_snackbar(f"Coloque el archivo .json recibido en:\n{folder}")
-                return
-
-            latest_file = json_files[0]
-            stats = merge_database_from_json(db, latest_file)
-            show_snackbar(
-                f"Datos combinados de {latest_file.name}:\n"
-                f"+{stats['rooms_merged']} cuartos, +{stats['leases_merged']} contratos, "
-                f"+{stats['payments_merged']} pagos, +{stats.get('settlements_merged', 0)} finiquitos."
-            )
-            if dialog:
-                dialog.dismiss()
-            on_backup_completed()
-        except Exception as e:
-            show_snackbar(f"Error al combinar datos: {e}")
-
-    btn1 = MDFillRoundFlatIconButton(
-        text="EXPORTAR PAGOS (CSV)",
+    csv_row = MDBoxLayout(
+        orientation="horizontal",
+        spacing=dp(8),
+        size_hint_y=None,
+        height=dp(44)
+    )
+    btn_csv_pagos = MDRectangleFlatIconButton(
+        text="PAGOS",
         icon="file-excel-outline",
-        size_hint=(1, None),
+        size_hint=(0.5, None),
         height=dp(44),
-        text_color=(1, 1, 1, 1),
-        icon_color=(1, 1, 1, 1),
         on_release=lambda x: export_payments()
     )
-    btn2 = MDFillRoundFlatIconButton(
-        text="EXPORTAR CUARTOS (CSV)",
+    btn_csv_cuartos = MDRectangleFlatIconButton(
+        text="CUARTOS",
         icon="home-export-outline",
-        size_hint=(1, None),
+        size_hint=(0.5, None),
         height=dp(44),
-        text_color=(1, 1, 1, 1),
-        icon_color=(1, 1, 1, 1),
         on_release=lambda x: export_rooms()
     )
-    btn3 = MDFillRoundFlatIconButton(
-        text="CREAR RESPALDO (JSON)",
-        icon="content-save-outline",
-        size_hint=(1, None),
-        height=dp(44),
-        md_bg_color=COLOR_PAGADO,
-        text_color=(1, 1, 1, 1),
-        icon_color=(1, 1, 1, 1),
-        on_release=lambda x: create_full_backup()
-    )
-    btn4 = MDFillRoundFlatIconButton(
-        text="COMBINAR OTRO SUPERVISOR",
-        icon="account-multiple-plus-outline",
-        size_hint=(1, None),
-        height=dp(44),
-        md_bg_color=(0.12, 0.53, 0.53, 1.0),
-        text_color=(1, 1, 1, 1),
-        icon_color=(1, 1, 1, 1),
-        on_release=lambda x: merge_from_other_supervisor()
-    )
+    csv_row.add_widget(btn_csv_pagos)
+    csv_row.add_widget(btn_csv_cuartos)
+    inner.add_widget(csv_row)
+    inner.add_widget(MDLabel(
+        text="Para abrir en computadora con Excel o Google Sheets.",
+        font_style="Caption",
+        theme_text_color="Hint",
+        adaptive_height=True
+    ))
 
-    content.add_widget(btn1)
-    content.add_widget(btn2)
-    content.add_widget(btn3)
-    content.add_widget(btn4)
+    scroll = MDScrollView(size_hint_y=None, height=dp(380))
+    scroll.add_widget(inner)
 
     dialog = MDDialog(
         title="Respaldos y Exportación",
         type="custom",
-        content_cls=content,
+        content_cls=scroll,
         buttons=[
             MDFlatButton(
                 text="CERRAR",
@@ -1208,3 +1247,14 @@ def show_backup_manager_dialog(
     )
     dialog.open()
     return dialog
+
+
+def _section_label(text: str) -> MDLabel:
+    """Crea un encabezado de sección pequeño para el diálogo de respaldos."""
+    return MDLabel(
+        text=text,
+        font_style="Overline",
+        theme_text_color="Primary",
+        bold=True,
+        adaptive_height=True
+    )
